@@ -390,3 +390,14 @@ export const STILL: Record<Mood, Anim> = {
   happy: 'happy',
   calm: 'loaf',
 };
+
+/** Sends the cat to a spot right away (scripted scenes, e.g. the demo video). */
+export function visit(
+  s: CatState,
+  l: Layout,
+  spot: Spot,
+  rand = Math.random,
+  anim?: Anim,
+): CatState {
+  return begin({ ...s, plan: spotPlan(s, l, spot, rand, anim) }, 'calm', l, rand);
+}
