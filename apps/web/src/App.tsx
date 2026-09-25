@@ -6,6 +6,7 @@ import { TabBar } from './components/TabBar';
 import { refreshAuth, useUser } from './lib/auth';
 import { useRealtimeSync } from './lib/queries';
 import { Diagnostics } from './pages/Diagnostics';
+import { Health } from './pages/Health';
 import { Household } from './pages/Household';
 import { Journal } from './pages/Journal';
 import { Login } from './pages/Login';
@@ -40,6 +41,7 @@ function Shell() {
       <Switch>
         <Route path="/" component={Today} />
         <Route path="/journal" component={Journal} />
+        <Route path="/health" component={Health} />
         <Route path="/tasks" component={Tasks} />
         <Route path="/tasks/:id">{(p) => <TaskEditor id={p.id} />}</Route>
         <Route path="/home" component={Household} />

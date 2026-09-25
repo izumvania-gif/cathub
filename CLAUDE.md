@@ -8,10 +8,11 @@ CatHub is a mobile-first PWA for a household (several people, one cat) to track 
 feeding, litter, grooming, parasite treatments, vaccinations, vet visits. Reminders go through a
 Telegram bot. The owner and users are in Russia. The UI language is Russian.
 
-**Current state: Phases 1–2 done.** Working: the schedule engine in `packages/core`, the
+**Current state: Phases 1–3 done.** Working: the schedule engine in `packages/core`, the
 PocketBase schema and household/Telegram routes, the web app (login, onboarding, Today, journal,
 task list and editor, household settings, `/diag`), and the bot (linking via `/start <token>`,
-reminders with done/snooze/skip buttons, `/today`, morning digest, family group chat). The source of truth for scope, data model, and phases is
+reminders with done/snooze/skip buttons, `/today`, morning digest, family group chat), and health
+(weight chart, health records with protected files, calendar subscription feed). The source of truth for scope, data model, and phases is
 `docs/PLAN.md`. `docs/REFERENCES.md` holds competitors, OSS, and vet-care frequency sources.
 `docs/HOSTING_RU.md` holds the Russia-specific hosting analysis. `docs/DEPLOY_AMVERA.md` is the
 chosen deployment (Amvera, Moscow region). `docs/DEPLOY_YC.md` is a rejected Yandex Cloud option,
@@ -78,6 +79,10 @@ pnpm-workspaces monorepo:
   `POST /api/cathub/telegram/link` (bot username from `TELEGRAM_BOT_USERNAME` or else the latest
   `diagnostics.bot_username` heartbeat), and the bot consumes the
   token from `telegram_links`.
+- Calendar feed: `GET /api/cathub/calendar/{token}.ics` (pb_hooks/calendar.pb.js) checks the secret
+  `households.calendar_token`, then proxies to the bot's internal HTTP server
+  (`apps/bot/src/calendar.ts`, 127.0.0.1:`ICS_PORT`=8091, PocketBase side `BOT_INTERNAL_URL`),
+  which builds the .ics with core's `calendarEvents`/`buildIcs`. Hooks never compute due dates.
 - `pocketbase/`: PocketBase backend (auth, SQLite, realtime, files). Schema lives in
   `pb_migrations` and access control in API rules. Every record is scoped to the user's `household`.
   Users can't set `household`/`role` through the API; membership changes go through the custom

@@ -19,6 +19,7 @@ export interface Household extends RecordModel {
   timezone: string;
   invite_code: string;
   telegram_group_chat_id: string;
+  calendar_token: string;
 }
 
 export interface Cat extends RecordModel {
@@ -66,4 +67,20 @@ export interface Snooze extends RecordModel {
   household: string;
   task: string;
   until: string;
+}
+
+export type HealthType = 'vaccination' | 'visit' | 'medication' | 'lab' | 'other';
+
+export interface HealthRecord extends RecordModel {
+  household: string;
+  cat: string;
+  type: HealthType;
+  date: string;
+  title: string;
+  clinic: string;
+  batch: string;
+  notes: string;
+  files: string[];
+  user: string;
+  expand?: { user?: User };
 }

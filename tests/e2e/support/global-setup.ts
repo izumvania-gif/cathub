@@ -2,7 +2,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { APP_URL, PB_PORT, SUPERUSER, TG_PORT, TG_URL } from './env';
+import { APP_URL, ICS_PORT, PB_PORT, SUPERUSER, TG_PORT, TG_URL } from './env';
 
 const ROOT = resolve(import.meta.dirname, '../../..');
 
@@ -61,7 +61,8 @@ export default async function globalSetup() {
         `--hooksDir=${join(ROOT, 'pocketbase/pb_hooks')}`,
         `--migrationsDir=${join(ROOT, 'pocketbase/pb_migrations')}`,
       ],
-      { stdio: log },
+      // The calendar route proxies to the bot's internal .ics server.
+      { stdio: log, env: { ...process.env, BOT_INTERNAL_URL: `http://127.0.0.1:${ICS_PORT}` } },
     ),
   );
   procs.push(
@@ -85,6 +86,7 @@ export default async function globalSetup() {
         REMINDER_INTERVAL_MS: '1000',
         HEARTBEAT_INTERVAL_MS: '2000',
         GROUP_QUIET_HOURS: '00:00-00:00',
+        ICS_PORT: String(ICS_PORT),
         APP_URL,
       },
     }),

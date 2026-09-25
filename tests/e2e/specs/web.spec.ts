@@ -105,3 +105,48 @@ test('household page: invite code and Telegram settings', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Подключить Telegram' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Выбрать чат в Telegram' })).toBeVisible();
 });
+
+test('health: record weights, see the chart, add a vaccination that completes the task', async ({
+  page,
+}) => {
+  await onboard(page);
+  await page.getByRole('link', { name: 'Здоровье' }).click();
+  await expect(page.getByRole('heading', { name: 'Здоровье' })).toBeVisible();
+
+  for (const w of ['4,2', '4,4']) {
+    await page.getByRole('button', { name: 'Записать' }).first().click();
+    await page.getByLabel('Вес, кг').fill(w);
+    await page.getByRole('button', { name: 'Записать' }).last().click();
+    await expect(page.getByText(`Записано: ${w}`)).toBeVisible();
+  }
+  await expect(page.getByRole('img', { name: /График: кг, 2 измерений/ })).toBeVisible();
+  await expect(page.locator('.font-display', { hasText: /^4,4$/ })).toBeVisible();
+
+  await page.getByRole('button', { name: 'Запись', exact: true }).click();
+  await page
+    .getByRole('button', { name: /Прививка/ })
+    .first()
+    .click();
+  await page.getByLabel('Название').fill('Нобивак Rabies');
+  const rabies = await page
+    .locator('option', { hasText: 'Прививка от бешенства' })
+    .getAttribute('value');
+  await page.getByLabel('Отметить дело выполненным').selectOption(rabies!);
+  await page.getByRole('button', { name: 'Сохранить запись' }).click();
+  await expect(page.getByText(/Сохранено, «Прививка от бешенства» отмечено/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /Нобивак Rabies/ })).toBeVisible();
+
+  // The vaccine task is done now and moves out of "Сейчас".
+  await page.getByRole('link', { name: 'Дела' }).click();
+  await expect(page.getByRole('link', { name: /Прививка от бешенства.*сделано/ })).toBeVisible();
+});
+
+test('household page offers the calendar subscription', async ({ page }) => {
+  await onboard(page);
+  await page.getByRole('link', { name: 'Дом' }).click();
+  const link = page.getByRole('link', { name: 'Подписаться на календарь' });
+  await expect(link).toHaveAttribute(
+    'href',
+    /^webcal:\/\/.+\/api\/cathub\/calendar\/[a-z0-9]{32}\.ics$/,
+  );
+});

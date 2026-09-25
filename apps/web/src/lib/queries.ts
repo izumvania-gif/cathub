@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { pb, toIso } from './pb';
-import type { Cat, Completion, Household, Snooze, Task, User } from './types';
+import type { Cat, Completion, HealthRecord, Household, Snooze, Task, User } from './types';
 import { useUser } from './auth';
 
 export const keys = {
@@ -11,6 +11,8 @@ export const keys = {
   tasks: ['tasks'] as const,
   completions: ['completions'] as const,
   snoozes: ['snoozes'] as const,
+  health: ['health'] as const,
+  measurements: ['measurements'] as const,
 };
 
 /** Journal / slot coverage window. Latest completion per task is fetched separately. */
@@ -108,6 +110,36 @@ export function useSnoozes() {
   });
 }
 
+export function useHealthRecords() {
+  const user = useUser();
+  return useQuery({
+    queryKey: [...keys.health, user?.household],
+    enabled: Boolean(user?.household),
+    queryFn: async () =>
+      (
+        await pb
+          .collection('health_records')
+          .getFullList<HealthRecord>({ sort: '-date,-created', expand: 'user' })
+      ).map((r) => ({ ...r, date: toIso(r.date) })),
+  });
+}
+
+/** All recorded values (e.g. weights) of a task with `track_value`, oldest first. */
+export function useMeasurements(taskId: string | undefined) {
+  return useQuery({
+    queryKey: [...keys.measurements, taskId],
+    enabled: Boolean(taskId),
+    queryFn: async () =>
+      (
+        await pb.collection('completions').getFullList<Completion>({
+          filter: pb.filter('task = {:t} && kind = "done" && value > 0', { t: taskId }),
+          sort: 'done_at',
+          expand: 'user',
+        })
+      ).map((c) => ({ ...c, done_at: toIso(c.done_at) })),
+  });
+}
+
 /** Live updates: when anyone in the household changes something, refetch. */
 export function useRealtimeSync() {
   const qc = useQueryClient();
@@ -116,6 +148,8 @@ export function useRealtimeSync() {
     if (!user?.household) return;
     const subs: Array<[string, readonly unknown[]]> = [
       ['completions', keys.completions],
+      ['completions', keys.measurements],
+      ['health_records', keys.health],
       ['tasks', keys.tasks],
       ['snoozes', keys.snoozes],
       ['cats', keys.cat],

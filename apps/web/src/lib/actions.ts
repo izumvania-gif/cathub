@@ -10,6 +10,7 @@ export function useTaskActions() {
     await Promise.all([
       qc.invalidateQueries({ queryKey: keys.completions }),
       qc.invalidateQueries({ queryKey: keys.snoozes }),
+      qc.invalidateQueries({ queryKey: keys.measurements }),
     ]);
   }, [qc]);
 

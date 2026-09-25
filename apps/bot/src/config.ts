@@ -17,6 +17,8 @@ export const config = {
   pbPassword: process.env.PB_SUPERUSER_PASSWORD || undefined,
   /** Quiet hours for the household group chat, "HH:MM-HH:MM" (default 23:00-08:00). */
   groupQuietHours: parseQuiet(process.env.GROUP_QUIET_HOURS),
+  /** Internal port for the .ics feed (PocketBase proxies to it; BOT_INTERNAL_URL on its side). */
+  icsPort: Number(process.env.ICS_PORT) || 8091,
   heartbeatIntervalMs: Number(process.env.HEARTBEAT_INTERVAL_MS) || 60_000,
   reminderIntervalMs: Number(process.env.REMINDER_INTERVAL_MS) || 30_000,
   /** Diagnostics records older than this are pruned. */

@@ -349,6 +349,61 @@ function GroupChatCard() {
   );
 }
 
+/** Subscription link for the phone calendar: rare tasks (vaccines, vet, parasites) with alarms. */
+function CalendarCard() {
+  const household = useHousehold();
+  const qc = useQueryClient();
+  const token = household.data?.calendar_token;
+  if (!token) return null;
+  const httpsUrl = `${window.location.origin}/api/cathub/calendar/${token}.ics`;
+  const webcalUrl = httpsUrl.replace(/^https?:/, 'webcal:');
+
+  const rotate = async () => {
+    if (!confirm('Старая ссылка на календарь перестанет работать. Выпустить новую?')) return;
+    try {
+      await pb.send('/api/cathub/calendar/rotate', { method: 'POST' });
+      await qc.invalidateQueries({ queryKey: keys.household });
+    } catch (err) {
+      toast.error(errorMessage(err));
+    }
+  };
+
+  return (
+    <div className="bg-card rounded-3xl p-4">
+      <p className="font-medium">Календарь в телефоне</p>
+      <p className="text-ink-soft mt-1 text-sm">
+        Прививки, осмотры, обработки и другие редкие дела появятся в календаре iPhone или Google и
+        будут обновляться сами. Ежедневные дела туда не попадают.
+      </p>
+      <div className="mt-3 grid gap-2">
+        <a
+          href={webcalUrl}
+          className="bg-ink text-paper flex min-h-12 items-center justify-center rounded-2xl font-semibold"
+        >
+          Подписаться на календарь
+        </a>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="secondary"
+            onClick={() =>
+              navigator.clipboard.writeText(httpsUrl).then(() => toast('Ссылка скопирована'))
+            }
+          >
+            Скопировать ссылку
+          </Button>
+          <Button variant="secondary" onClick={rotate}>
+            Новая ссылка
+          </Button>
+        </div>
+        <p className="text-ink-soft text-xs">
+          Google Календарь: «Другие календари» → «Добавить по URL» → вставьте ссылку. Никому её не
+          пересылайте: по ней видны дела вашего кота.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function Household() {
   const user = useUser();
   const household = useHousehold();
@@ -426,6 +481,7 @@ export function Household() {
         </Field>
         <TelegramCard />
         <GroupChatCard />
+        <CalendarCard />
         <Button variant="danger" onClick={logout}>
           Выйти ({user?.email})
         </Button>

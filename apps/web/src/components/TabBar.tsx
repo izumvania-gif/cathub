@@ -1,10 +1,11 @@
 import clsx from 'clsx';
-import { CalendarCheck, History, House, ListChecks } from 'lucide-react';
+import { CalendarCheck, HeartPulse, History, House, ListChecks } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 
 const TABS = [
   { href: '/', label: 'Сегодня', icon: CalendarCheck },
   { href: '/journal', label: 'Журнал', icon: History },
+  { href: '/health', label: 'Здоровье', icon: HeartPulse },
   { href: '/tasks', label: 'Дела', icon: ListChecks },
   { href: '/home', label: 'Дом', icon: House },
 ];
@@ -13,7 +14,7 @@ export function TabBar() {
   const [location] = useLocation();
   return (
     <nav className="bg-card/90 border-line fixed inset-x-0 bottom-0 z-40 border-t backdrop-blur-lg">
-      <ul className="mx-auto grid max-w-lg grid-cols-4 pb-[env(safe-area-inset-bottom)]">
+      <ul className="mx-auto grid max-w-lg grid-cols-5 pb-[env(safe-area-inset-bottom)]">
         {TABS.map(({ href, label, icon: Icon }) => {
           const active = href === '/' ? location === '/' : location.startsWith(href);
           return (

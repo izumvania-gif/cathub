@@ -1,5 +1,6 @@
 import { GrammyError, type Bot } from 'grammy';
 import { config } from './config';
+import { startCalendarServer } from './calendar';
 import { registerHandlers } from './handlers';
 import { log } from './log';
 import { PocketBaseClient } from './pocketbase';
@@ -88,6 +89,8 @@ async function main() {
 
   let bot: Bot | undefined;
   const loops: Promise<unknown>[] = [heartbeatLoop(pb)];
+  // The calendar feed works without Telegram, only PocketBase access is needed.
+  const calendar = pb.enabled ? startCalendarServer(pb) : undefined;
   if (config.botToken) {
     bot = createBot(config.botToken);
     const reminders = new ReminderService(bot.api, pb);
@@ -104,6 +107,7 @@ async function main() {
   const shutdown = async (signal: string) => {
     log.info(`${signal} received, stopping`);
     stopping = true;
+    calendar?.close();
     await bot?.stop();
     process.exit(0);
   };
