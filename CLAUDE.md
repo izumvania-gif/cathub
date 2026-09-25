@@ -45,6 +45,10 @@ Key design decisions:
 
 ## Constraints
 
+- Servers in Russia often can't reach `api.telegram.org` directly. The bot must use long polling
+  (no webhooks) and read the API base URL from `TELEGRAM_API_ROOT` (grammY `client.apiRoot`) so it
+  can go through a provider proxy or a relay. Telegram is never the only login method. See
+  `docs/PLAN.md` §8.
 - Everything must work for users in Russia without VPN. Self-host fonts and assets, and add no
   runtime dependency on Google Fonts or foreign CDNs. Hosting must be payable with Russian cards
   (see `docs/HOSTING_RU.md`).
