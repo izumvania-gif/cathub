@@ -29,6 +29,9 @@ async function setup(page: Page) {
   await page.getByLabel('Пароль').fill('password123');
   await page.getByRole('button', { name: 'Создать аккаунт' }).click();
   await page.getByLabel('Как зовут кота').fill('Барсик');
+  // The button fades in once enabled; scan after the transition, not mid-way.
+  await expect(page.getByRole('button', { name: 'Дальше' })).toBeEnabled();
+  await page.waitForTimeout(500);
   found.push(...(await scan(page, 'onboarding-cat')));
   await page.getByRole('button', { name: 'Дальше' }).click();
   await expect(page.getByText('Что отслеживать')).toBeVisible();
