@@ -1,45 +1,15 @@
 /// <reference path="../pb_data/types.d.ts" />
 
-// Telegram linking. The bot username comes from TELEGRAM_BOT_USERNAME (same container env).
+// Telegram linking (docs/PLAN.md §9). Handlers run in separate VMs, so helpers are required inside.
 
 // POST /api/cathub/telegram/link → { url } to open t.me/<bot>?start=<one-time token>
 routerAdd(
   'POST',
   '/api/cathub/telegram/link',
   (e) => {
-    let bot = String($os.getenv('TELEGRAM_BOT_USERNAME') || '')
-      .replace(/^@/, '')
-      .trim();
-    if (!bot) {
-      // Fall back to the username the bot reported in its latest heartbeat.
-      try {
-        const hb = $app.findRecordsByFilter('diagnostics', "bot_username != ''", '-created', 1, 0);
-        if (hb.length) bot = hb[0].getString('bot_username');
-      } catch (_) {
-        /* no heartbeats yet */
-      }
-    }
-    if (!bot) {
-      throw new BadRequestError(
-        'Бот ещё не подключился к Telegram. Проверьте переменную BOT_TOKEN и перезапустите проект; подробности — на странице /diag.',
-      );
-    }
-    const col = $app.findCollectionByNameOrId('telegram_links');
-    // One active token per user.
-    for (const old of $app.findRecordsByFilter('telegram_links', 'user = {:u}', '', 0, 0, {
-      u: e.auth.id,
-    })) {
-      $app.delete(old);
-    }
-    const rec = new Record(col);
-    const token = $security.randomStringWithAlphabet(
-      24,
-      'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789',
-    );
-    rec.set('user', e.auth.id);
-    rec.set('token', token);
-    rec.set('expires', new Date(Date.now() + 30 * 60 * 1000).toISOString());
-    $app.save(rec);
+    const tg = require(`${__hooks}/lib/telegram.js`);
+    const bot = tg.botUsername();
+    const token = tg.createLinkToken(e.auth.id, 'user', '');
     return e.json(200, { url: `https://t.me/${bot}?start=${token}` });
   },
   $apis.requireAuth('users'),
@@ -55,6 +25,37 @@ routerAdd(
     u.set('telegram_username', '');
     u.set('notify', false);
     $app.save(u);
+    return e.json(200, { ok: true });
+  },
+  $apis.requireAuth('users'),
+);
+
+// POST /api/cathub/telegram/group-link → { url } that adds the bot to a group
+// (t.me/<bot>?startgroup=<token>); the bot binds that group to the caller's household.
+routerAdd(
+  'POST',
+  '/api/cathub/telegram/group-link',
+  (e) => {
+    const tg = require(`${__hooks}/lib/telegram.js`);
+    const household = e.auth.getString('household');
+    if (!household) throw new BadRequestError('Сначала создайте дом или присоединитесь к нему.');
+    const bot = tg.botUsername();
+    const token = tg.createLinkToken(e.auth.id, 'group', household);
+    return e.json(200, { url: `https://t.me/${bot}?startgroup=${token}` });
+  },
+  $apis.requireAuth('users'),
+);
+
+// POST /api/cathub/telegram/group-unlink → reminders go back to personal chats.
+routerAdd(
+  'POST',
+  '/api/cathub/telegram/group-unlink',
+  (e) => {
+    const household = e.auth.getString('household');
+    if (!household) throw new BadRequestError('Вы не состоите в доме.');
+    const h = $app.findRecordById('households', household);
+    h.set('telegram_group_chat_id', '');
+    $app.save(h);
     return e.json(200, { ok: true });
   },
   $apis.requireAuth('users'),

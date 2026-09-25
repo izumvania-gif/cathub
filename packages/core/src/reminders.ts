@@ -63,3 +63,29 @@ export function isQuietTime(
   const m = local.getHours() * 60 + local.getMinutes();
   return from < to ? m >= from && m < to : m >= from || m < to;
 }
+
+/** Local calendar date "YYYY-MM-DD" in the given timezone. */
+export function localDate(now: Date, tz: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(now);
+}
+
+/**
+ * Whether the morning digest should go out now: the local time has reached `digestTime` and
+ * none was sent today. Returns the local date to record as sent, or null.
+ * Late starts still send (e.g. the bot restarted at 09:40), but not after noon.
+ */
+export function digestDue(
+  now: Date,
+  tz: string,
+  digestTime: string | null | undefined,
+  sentOn: string | null | undefined,
+): string | null {
+  const at = digestTime ? parseTimeOfDay(digestTime) : null;
+  if (at === null) return null;
+  const today = localDate(now, tz);
+  if (sentOn === today) return null;
+  const local = new TZDate(now.getTime(), tz);
+  const m = local.getHours() * 60 + local.getMinutes();
+  const latest = Math.max(at + 180, 12 * 60);
+  return m >= at && m < latest ? today : null;
+}

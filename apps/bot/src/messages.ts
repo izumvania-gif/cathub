@@ -1,6 +1,13 @@
-import { describeDue, describeSchedule, type Evaluation, type ReminderStage } from '@cathub/core';
+import {
+  describeDue,
+  describeSchedule,
+  evaluate,
+  urgencyCompare,
+  type Evaluation,
+  type ReminderStage,
+} from '@cathub/core';
 import { InlineKeyboard } from 'grammy';
-import type { TaskRec } from './types';
+import type { HouseholdState, TaskRec } from './types';
 
 export const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -79,4 +86,36 @@ export function resolutionLine(
     case 'gone':
       return '✔️ Уже неактуально';
   }
+}
+
+/** "Today" overview used by /today and the morning digest. */
+export function summaryText(
+  state: HouseholdState,
+  now: Date,
+  heading: string,
+  appUrl?: string,
+): { text: string; pending: number } {
+  const tz = state.household.timezone || 'Europe/Moscow';
+  const items = state.tasks
+    .map((task) => ({
+      task,
+      ev: evaluate(
+        task.schedule,
+        state.completions
+          .filter((c) => c.task === task.id)
+          .map((c) => ({ doneAt: c.done_at, kind: c.kind })),
+        { now, tz, snoozedUntil: state.snoozes.find((s) => s.task === task.id)?.until ?? null },
+      ),
+    }))
+    .sort((a, b) => urgencyCompare(a.ev, b.ev));
+  const pending = items.filter((i) => ['overdue', 'due', 'soon'].includes(i.ev.status));
+  const done = items.filter((i) => i.ev.status === 'done');
+  const line = (i: (typeof items)[number]) =>
+    `${i.task.emoji || '🐾'} ${escapeHtml(i.task.title)} — ${describeDue(i.ev, now, tz)}`;
+  const parts = [`<b>${escapeHtml(heading)}</b>`];
+  parts.push(pending.length ? pending.map(line).join('\n') : 'Всё сделано 🎉');
+  if (done.length)
+    parts.push(`<i>Уже сделано: ${done.map((i) => escapeHtml(i.task.title)).join(', ')}</i>`);
+  if (appUrl) parts.push(`Приложение: ${appUrl}`);
+  return { text: parts.join('\n\n'), pending: pending.length };
 }

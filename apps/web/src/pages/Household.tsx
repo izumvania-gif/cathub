@@ -204,8 +204,9 @@ function TelegramCard() {
         <>
           <p className="text-ink-soft mt-1 text-sm">
             Подключено{user?.telegram_username ? ` (@${user.telegram_username})` : ''}. Бот пишет,
-            когда пора что-то сделать; отмечать можно прямо в чате. Ночью (23:00–08:00) он молчит.
+            когда пора что-то сделать; отмечать можно прямо в чате.
           </p>
+          {user ? <NotifySettings key={user.id} /> : null}
           <Button variant="secondary" className="mt-3 w-full" busy={busy} onClick={disconnect}>
             Отключить
           </Button>
@@ -220,6 +221,129 @@ function TelegramCard() {
             Подключить Telegram
           </Button>
         </>
+      )}
+    </div>
+  );
+}
+
+/** Personal notification settings: morning digest and quiet hours (docs/PLAN.md §9). */
+function NotifySettings() {
+  const user = useUser()!;
+  const [digestOn, setDigestOn] = useState(Boolean(user.digest_time));
+  const [digestTime, setDigestTime] = useState(user.digest_time || '09:00');
+  const [quietFrom, setQuietFrom] = useState(user.quiet_hours?.from ?? '23:00');
+  const [quietTo, setQuietTo] = useState(user.quiet_hours?.to ?? '08:00');
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await pb.collection('users').update(user.id, {
+        digest_time: digestOn ? digestTime : '',
+        quiet_hours: { from: quietFrom, to: quietTo },
+      });
+      await refreshAuth();
+      toast.success('Сохранено');
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 grid gap-3">
+      <div className="divide-line divide-y">
+        <Toggle
+          label="Утренняя сводка"
+          hint="Что сегодня и что просрочено. Не приходит, если делать нечего."
+          checked={digestOn}
+          onChange={setDigestOn}
+        />
+      </div>
+      {digestOn ? (
+        <Field label="Время сводки">
+          <Input type="time" value={digestTime} onChange={(e) => setDigestTime(e.target.value)} />
+        </Field>
+      ) : null}
+      <div>
+        <span className="text-ink-soft mb-1.5 block text-sm font-medium">Тихие часы</span>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <Input
+            type="time"
+            aria-label="Тихие часы с"
+            value={quietFrom}
+            onChange={(e) => setQuietFrom(e.target.value)}
+          />
+          <span className="text-ink-soft">—</span>
+          <Input
+            type="time"
+            aria-label="Тихие часы до"
+            value={quietTo}
+            onChange={(e) => setQuietTo(e.target.value)}
+          />
+        </div>
+        <span className="text-ink-soft mt-1.5 block text-xs">
+          В это время бот молчит, напоминания придут после.
+        </span>
+      </div>
+      <Button variant="secondary" busy={busy} onClick={save}>
+        Сохранить настройки
+      </Button>
+    </div>
+  );
+}
+
+/** Household group chat: shared reminders go there instead of everyone's private chats. */
+function GroupChatCard() {
+  const household = useHousehold();
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const linked = Boolean(household.data?.telegram_group_chat_id);
+
+  const connect = async () => {
+    setBusy(true);
+    try {
+      const { url } = await pb.send<{ url: string }>('/api/cathub/telegram/group-link', {
+        method: 'POST',
+      });
+      window.location.href = url;
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy(true);
+    try {
+      await pb.send('/api/cathub/telegram/group-unlink', { method: 'POST' });
+      await qc.invalidateQueries({ queryKey: keys.household });
+      toast('Семейный чат отключён');
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="bg-card rounded-3xl p-4">
+      <p className="font-medium">Семейный чат</p>
+      <p className="text-ink-soft mt-1 text-sm">
+        {linked
+          ? 'Подключён. Общие дела приходят туда одним сообщением, а дела с ответственным — ему лично.'
+          : 'Добавьте бота в общий чат семьи: напоминания об общих делах будут приходить туда, а не каждому по отдельности.'}
+      </p>
+      {linked ? (
+        <Button variant="secondary" className="mt-3 w-full" busy={busy} onClick={disconnect}>
+          Отключить семейный чат
+        </Button>
+      ) : (
+        <Button variant="secondary" className="mt-3 w-full" busy={busy} onClick={connect}>
+          Выбрать чат в Telegram
+        </Button>
       )}
     </div>
   );
@@ -301,6 +425,7 @@ export function Household() {
           </select>
         </Field>
         <TelegramCard />
+        <GroupChatCard />
         <Button variant="danger" onClick={logout}>
           Выйти ({user?.email})
         </Button>

@@ -8,8 +8,8 @@ export const config = {
   pbUrl: process.env.PB_URL?.trim() || 'http://127.0.0.1:8090',
   pbEmail: process.env.PB_SUPERUSER_EMAIL?.trim() || undefined,
   pbPassword: process.env.PB_SUPERUSER_PASSWORD || undefined,
-  heartbeatIntervalMs: 60_000,
-  reminderIntervalMs: 30_000,
+  heartbeatIntervalMs: Number(process.env.HEARTBEAT_INTERVAL_MS) || 60_000,
+  reminderIntervalMs: Number(process.env.REMINDER_INTERVAL_MS) || 30_000,
   /** Diagnostics records older than this are pruned. */
   diagnosticsRetentionMs: 24 * 60 * 60 * 1000,
 };

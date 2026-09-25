@@ -1,8 +1,8 @@
-import { describeDue, evaluate, urgencyCompare } from '@cathub/core';
+import { evaluate } from '@cathub/core';
 import type { Bot, Context } from 'grammy';
 import { config } from './config';
 import { log } from './log';
-import { escapeHtml, parseCallback, resolutionLine, timeIn } from './messages';
+import { parseCallback, resolutionLine, summaryText, timeIn } from './messages';
 import type { PocketBaseClient } from './pocketbase';
 import type { ReminderService } from './reminders';
 import type { HouseholdState } from './types';
@@ -16,6 +16,7 @@ export interface HandlerDeps {
 }
 
 const appLink = () => (config.appUrl ? `\n\nПриложение: ${config.appUrl}` : '');
+const isGroup = (ctx: Context) => ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
 
 async function householdOf(
   db: PocketBaseClient,
@@ -25,10 +26,23 @@ async function householdOf(
   return all.find((s) => s.household.id === householdId) ?? null;
 }
 
+async function householdOfGroup(
+  db: PocketBaseClient,
+  chatId: number,
+): Promise<HouseholdState | null> {
+  const all = await db.loadAll();
+  return all.find((s) => s.household.telegram_group_chat_id === String(chatId)) ?? null;
+}
+
 export function registerHandlers(bot: Bot, { db, reminders, status }: HandlerDeps) {
   bot.command('start', async (ctx) => {
     const token = ctx.match?.trim();
     if (!token) {
+      if (isGroup(ctx)) {
+        return ctx.reply(
+          'Чтобы присылать сюда напоминания, подключите этот чат в приложении: «Дом» → «Семейный чат».',
+        );
+      }
       const user = await db.findUserByChat(ctx.chat.id).catch(() => null);
       return ctx.reply(
         user
@@ -37,60 +51,68 @@ export function registerHandlers(bot: Bot, { db, reminders, status }: HandlerDep
               appLink(),
       );
     }
-    const user = await db.linkChat(token, ctx.chat.id, ctx.from?.username);
-    if (!user) {
+    const linked = await db.linkChat(token, ctx.chat.id, ctx.from?.username);
+    if (!linked) {
       return ctx.reply(
-        'Ссылка устарела или уже использована. Нажмите «Подключить Telegram» в приложении ещё раз.',
+        'Ссылка устарела или уже использована. Нажмите кнопку в приложении ещё раз.',
       );
     }
-    log.info(`linked chat ${ctx.chat.id} to user ${user.id}`);
+    if (linked.kind === 'group') {
+      log.info(`linked group ${ctx.chat.id} to household ${linked.household.id}`);
+      return ctx.reply(
+        'Готово! Сюда будут приходить напоминания об общих делах по коту. ' +
+          'Отмечать «✅ Сделано» может любой, кто подключил свой Telegram в приложении.\n\n/today — что сегодня',
+      );
+    }
+    log.info(`linked chat ${ctx.chat.id} to user ${linked.user.id}`);
     return ctx.reply(
-      `Готово, ${user.name || 'друг'}! Буду присылать напоминания о делах по коту. ` +
+      `Готово, ${linked.user.name || 'друг'}! Буду присылать напоминания о делах по коту. ` +
         'Отмечать можно прямо здесь, кнопкой «✅ Сделано».\n\n/today — что сегодня',
     );
   });
 
   bot.command('today', async (ctx) => {
-    const user = await db.findUserByChat(ctx.chat.id);
-    if (!user)
-      return ctx.reply('Сначала подключите Telegram в приложении: «Дом» → «Подключить Telegram».');
-    const state = await householdOf(db, user.household);
-    if (!state) return ctx.reply('Не нашёл ваш дом.');
-    const tz = state.household.timezone || DEFAULT_TZ;
-    const now = new Date();
-    const items = state.tasks
-      .map((task) => ({
-        task,
-        ev: evaluate(
-          task.schedule,
-          state.completions
-            .filter((c) => c.task === task.id)
-            .map((c) => ({ doneAt: c.done_at, kind: c.kind })),
-          { now, tz, snoozedUntil: state.snoozes.find((s) => s.task === task.id)?.until ?? null },
-        ),
-      }))
-      .sort((a, b) => urgencyCompare(a.ev, b.ev));
-    const line = (i: (typeof items)[number]) =>
-      `${i.task.emoji || '🐾'} ${escapeHtml(i.task.title)} — ${i.ev.status === 'done' ? 'сделано' : describeDue(i.ev, now, tz)}`;
-    const pending = items.filter((i) => ['overdue', 'due', 'soon'].includes(i.ev.status));
-    const done = items.filter((i) => i.ev.status === 'done');
-    const parts = [`<b>Сегодня у ${escapeHtml(state.cat?.name ?? 'кота')}</b>`];
-    parts.push(pending.length ? pending.map(line).join('\n') : 'Всё сделано 🎉');
-    if (done.length)
-      parts.push(`<i>Сделано: ${done.map((i) => escapeHtml(i.task.title)).join(', ')}</i>`);
-    return ctx.reply(parts.join('\n\n') + appLink(), { parse_mode: 'HTML' });
+    let state: HouseholdState | null;
+    if (isGroup(ctx)) {
+      state = await householdOfGroup(db, ctx.chat.id);
+      if (!state) return ctx.reply('Этот чат не подключён. В приложении: «Дом» → «Семейный чат».');
+    } else {
+      const user = await db.findUserByChat(ctx.chat.id);
+      if (!user)
+        return ctx.reply(
+          'Сначала подключите Telegram в приложении: «Дом» → «Подключить Telegram».',
+        );
+      state = await householdOf(db, user.household);
+      if (!state) return ctx.reply('Не нашёл ваш дом.');
+    }
+    const { text } = summaryText(
+      state,
+      new Date(),
+      `Сегодня у ${state.cat?.name ?? 'кота'}`,
+      config.appUrl,
+    );
+    return ctx.reply(text, { parse_mode: 'HTML' });
   });
 
   bot.command('ping', (ctx) => ctx.reply(status()));
 
+  // Removed from a group → stop sending household reminders there.
+  bot.on('my_chat_member', async (ctx) => {
+    const st = ctx.myChatMember.new_chat_member.status;
+    if ((st === 'left' || st === 'kicked') && isGroup(ctx)) {
+      await db.unlinkGroup(ctx.chat.id);
+      log.info(`bot removed from group ${ctx.chat.id}; unlinked`);
+    }
+  });
+
   bot.on('callback_query:data', async (ctx: Context) => {
-    const data = ctx.callbackQuery?.data ?? '';
-    const cb = parseCallback(data);
+    const cb = parseCallback(ctx.callbackQuery?.data ?? '');
     if (!cb || !ctx.from) return ctx.answerCallbackQuery();
+    // The presser is identified by their own Telegram id (private chat id = user id), also in groups.
     const user = await db.findUserByChat(ctx.from.id);
     if (!user) {
       return ctx.answerCallbackQuery({
-        text: 'Подключите Telegram в приложении, чтобы отмечать дела отсюда.',
+        text: 'Подключите свой Telegram в приложении («Дом» → «Подключить Telegram»), чтобы отмечать дела отсюда.',
         show_alert: true,
       });
     }

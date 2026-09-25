@@ -130,14 +130,18 @@ export class PocketBaseClient {
     }
   }
 
-  /** Consumes a one-time link token and binds the chat to its user. Returns the user or null. */
+  /**
+   * Consumes a one-time link token. A "user" token binds this private chat to the user; a "group"
+   * token binds this group chat to the household. Returns what was linked, or null if the token
+   * is unknown or expired.
+   */
   async linkChat(
     token: string,
     chatId: number,
     username: string | undefined,
-  ): Promise<UserRec | null> {
+  ): Promise<{ kind: 'user'; user: UserRec } | { kind: 'group'; household: HouseholdRec } | null> {
     await this.ensureAuth();
-    let link: { id: string; user: string; expires: string };
+    let link: { id: string; user: string; kind: string; household: string; expires: string };
     try {
       link = await this.pb
         .collection('telegram_links')
@@ -147,17 +151,40 @@ export class PocketBaseClient {
     }
     await this.pb.collection('telegram_links').delete(link.id);
     if (Date.parse(toIso(link.expires)) < Date.now()) return null;
+
+    if (link.kind === 'group') {
+      if (!link.household) return null;
+      const household = await this.pb
+        .collection('households')
+        .update<HouseholdRec>(link.household, { telegram_group_chat_id: String(chatId) });
+      return { kind: 'group', household };
+    }
     // One chat ↔ one user: unbind the chat from anyone else first.
     const others = await this.pb.collection('users').getFullList<UserRec>({
       filter: this.pb.filter('telegram_chat_id = {:c}', { c: String(chatId) }),
     });
     for (const o of others)
       await this.pb.collection('users').update(o.id, { telegram_chat_id: '', notify: false });
-    return this.pb.collection('users').update<UserRec>(link.user, {
+    const user = await this.pb.collection('users').update<UserRec>(link.user, {
       telegram_chat_id: String(chatId),
       telegram_username: username ?? '',
       notify: true,
     });
+    return { kind: 'user', user };
+  }
+
+  /** The bot was removed from a group: stop sending household reminders there. */
+  async unlinkGroup(chatId: number): Promise<void> {
+    await this.ensureAuth();
+    const list = await this.pb.collection('households').getFullList<HouseholdRec>({
+      filter: this.pb.filter('telegram_group_chat_id = {:c}', { c: String(chatId) }),
+    });
+    for (const h of list)
+      await this.pb.collection('households').update(h.id, { telegram_group_chat_id: '' });
+  }
+
+  async markDigestSent(userId: string, localDate: string): Promise<void> {
+    await this.pb.collection('users').update(userId, { digest_sent_on: localDate });
   }
 
   // ── actions from Telegram ───────────────────────────────────────────────

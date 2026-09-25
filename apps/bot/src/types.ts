@@ -4,6 +4,7 @@ export interface HouseholdRec {
   id: string;
   name: string;
   timezone: string;
+  telegram_group_chat_id: string;
 }
 export interface UserRec {
   id: string;
@@ -14,6 +15,8 @@ export interface UserRec {
   telegram_username: string;
   notify: boolean;
   quiet_hours: { from: string; to: string } | null;
+  digest_time: string;
+  digest_sent_on: string;
 }
 export interface CatRec {
   id: string;

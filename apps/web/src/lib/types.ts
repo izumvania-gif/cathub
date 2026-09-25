@@ -10,12 +10,15 @@ export interface User extends RecordModel {
   telegram_chat_id: string;
   telegram_username: string;
   notify: boolean;
+  digest_time: string;
+  quiet_hours: { from: string; to: string } | null;
 }
 
 export interface Household extends RecordModel {
   name: string;
   timezone: string;
   invite_code: string;
+  telegram_group_chat_id: string;
 }
 
 export interface Cat extends RecordModel {
