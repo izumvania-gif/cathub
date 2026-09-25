@@ -160,6 +160,8 @@ export function registerHandlers(bot: Bot, { db, reminders, status }: HandlerDep
 
     await db.createCompletion(task, user, cb.action === 's' ? 'skipped' : 'done');
     await ctx.answerCallbackQuery({ text: cb.action === 's' ? 'Пропущено' : 'Отмечено ✅' });
-    await reminders.resolveHandled(await db.loadAll(), new Date());
+    const states = await db.loadAll();
+    await reminders.rewardPending(states);
+    await reminders.resolveHandled(states, new Date());
   });
 }

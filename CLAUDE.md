@@ -89,6 +89,12 @@ pnpm-workspaces monorepo:
   `POST /api/cathub/telegram/webapp-auth`, which asks the bot's internal `/webapp-verify` to check
   the HMAC (the bot holds `BOT_TOKEN`) and returns a PocketBase auth for the user with that
   `telegram_chat_id`.
+- Fish 🐟 (docs/PLAN.md §6.7): core's `rewardFor` prices a completion from the task's status at
+  that moment (weight × 5, ×1.5 on time, 0 for a repeat or a skip). The bot's tick
+  (`ReminderService.rewardPending`) stores it in `completions.fish` + `rewarded`; clients can't set
+  those fields. Perfect-day bonuses go to `fish_bonuses`. The balance is the `fish_balance` view;
+  `pb_hooks/room.pb.js` sells items (prices in `pb_hooks/lib/room.js` must match core's
+  `ROOM_CATALOG`, a bot test checks it). The web app adds not-yet-priced marks locally (`lib/fish.ts`).
 - Other hooks: `rotation.pb.js` (after a completion the assignee moves to the next person in
   `tasks.rotation`; undone on delete), `backups.pb.js` (backup cron/S3 from `BACKUP_*` env on start),
   `users.pb.js` (default digest time).

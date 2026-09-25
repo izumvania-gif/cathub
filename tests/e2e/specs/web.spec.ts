@@ -248,3 +248,40 @@ test('Mini App: opening the app from Telegram signs in automatically', async ({
   await expect(mini.getByRole('button', { name: /^Барсик: .*Погладить$/ })).toBeVisible();
   await tg.close();
 });
+
+test('fish: a mark shows its reward, the shop sells an item once there is enough', async ({
+  page,
+}) => {
+  await onboard(page);
+  await page.getByRole('button', { name: 'Покормил(а)' }).click();
+  await expect(page.getByText(/Отмечено: Покормить · \+\d+ 🐟/)).toBeVisible();
+
+  await page.getByRole('link', { name: /Комната кота и магазин/ }).click();
+  await expect(page.getByRole('heading', { name: 'Комната' })).toBeVisible();
+  const rug = page.getByRole('button', { name: 'Купить: Коврик за 40 рыбок' });
+  await expect(rug).toBeDisabled();
+
+  // Top up the feeding completion as the bot would, then buy.
+  const { api, superuserToken } = await import('../support/api');
+  const su = await superuserToken();
+  const household = await page.evaluate(
+    () => JSON.parse(localStorage.getItem('pocketbase_auth')!).record.household as string,
+  );
+  const list = await api<{ items: Array<{ id: string }> }>(
+    'GET',
+    `/api/collections/completions/records?filter=${encodeURIComponent(`household='${household}'`)}`,
+    undefined,
+    su,
+  );
+  await api(
+    'PATCH',
+    `/api/collections/completions/records/${list.items[0]!.id}`,
+    { fish: 100, rewarded: true },
+    su,
+  );
+  await expect(rug).toBeEnabled();
+  await rug.click();
+  await expect(page.getByText('Коврик — теперь в комнате!')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Коврик: в комнате' })).toBeVisible();
+  await expect(page.getByText('🐟 60')).toBeVisible();
+});

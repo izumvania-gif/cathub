@@ -32,6 +32,9 @@ export interface TaskRec {
   schedule: Schedule;
   assignee: string;
   medical: boolean;
+  weight: number;
+  template_key: string;
+  created: string;
 }
 export interface CompletionRec {
   id: string;
@@ -40,6 +43,8 @@ export interface CompletionRec {
   user: string;
   done_at: string;
   kind: 'done' | 'skipped';
+  fish: number;
+  rewarded: boolean;
 }
 export interface SnoozeRec {
   id: string;
@@ -80,4 +85,6 @@ export interface HouseholdState {
   completions: CompletionRec[];
   snoozes: SnoozeRec[];
   supplies: SupplyRec[];
+  /** Fish 🐟 balance (the fish_balance view), if known. */
+  fish?: number;
 }

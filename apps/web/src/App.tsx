@@ -24,6 +24,7 @@ const Diagnostics = lazy(() =>
 );
 const Health = lazy(() => import('./pages/Health').then((m) => ({ default: m.Health })));
 const Household = lazy(() => import('./pages/Household').then((m) => ({ default: m.Household })));
+const Room = lazy(() => import('./pages/Room').then((m) => ({ default: m.Room })));
 const Journal = lazy(() => import('./pages/Journal').then((m) => ({ default: m.Journal })));
 const TaskEditor = lazy(() =>
   import('./pages/TaskEditor').then((m) => ({ default: m.TaskEditor })),
@@ -78,6 +79,7 @@ function Shell() {
         <Route path="/tasks" component={Tasks} />
         <Route path="/tasks/:id">{(p) => <TaskEditor id={p.id} />}</Route>
         <Route path="/home" component={Household} />
+        <Route path="/room" component={Room} />
         <Route>
           <Redirect to="/" />
         </Route>

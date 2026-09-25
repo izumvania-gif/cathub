@@ -5,7 +5,6 @@ import { Link } from 'wouter';
 import { MOOD_LABELS } from '../cat/behavior';
 import { CatLoader } from '../cat/CatLoader';
 import { CatScene } from '../cat/CatScene';
-import { STARTER_ITEMS } from '../cat/room';
 import { InstallHint } from '../components/InstallHint';
 import { SleepyCat } from '../components/SleepyCat';
 import { DoubleCheckSheet, TaskActionsSheet } from '../components/TaskActions';
@@ -15,6 +14,9 @@ import { Button, Empty } from '../components/ui';
 import { useBoard, type BoardItem } from '../lib/board';
 import { bowlLevel, catMood, findFeeding, isEvening } from '../lib/catMood';
 import { useCatLook } from '../lib/catLook';
+import { useFish } from '../lib/fish';
+import { FishPill } from '../components/FishPill';
+import { useRoomKeys } from '../lib/roomItems';
 import { useCat, useMembers } from '../lib/queries';
 import { SupplyRow, SupplySheet } from '../components/Supplies';
 import { useSupplyForecasts } from '../lib/supplies';
@@ -39,13 +41,22 @@ function CatHero({
 }) {
   const look = useCatLook();
   const mood = catMood(items, now, tz);
+  const fish = useFish();
+  const roomItems = useRoomKeys();
   return (
-    <section className="bg-card overflow-hidden rounded-[2rem] pb-5 text-center">
+    <section className="bg-card relative overflow-hidden rounded-[2rem] pb-5 text-center">
+      <Link
+        href="/room"
+        className="absolute top-3 left-3 z-10"
+        aria-label={`Комната кота и магазин: ${fish.balance} рыбок`}
+      >
+        <FishPill balance={fish.balance} />
+      </Link>
       <CatScene
         look={look}
         mood={mood}
         name={catName}
-        items={STARTER_ITEMS}
+        items={roomItems}
         bowlLevel={bowlLevel(feeding)}
         night={isEvening(now, tz)}
       />

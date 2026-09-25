@@ -48,6 +48,8 @@ export interface Task extends RecordModel {
   schedule: Schedule;
   track_value: TrackValue | null;
   template_key: string;
+  /** 1–3, or 0 for the default by template/category (core's taskWeight). */
+  weight: number;
   medical: boolean;
   notes: string;
   assignee: string;
@@ -64,7 +66,24 @@ export interface Completion extends RecordModel {
   kind: 'done' | 'skipped';
   value: number;
   note: string;
+  /** Fish 🐟 the bot priced this completion at (see core's rewardFor). */
+  fish: number;
+  rewarded: boolean;
   expand?: { user?: User; task?: Task };
+}
+
+export interface RoomItem extends RecordModel {
+  household: string;
+  item: string;
+  price: number;
+  placed: boolean;
+  bought_by: string;
+}
+
+export interface FishBalance extends RecordModel {
+  from_tasks: number;
+  from_bonuses: number;
+  spent: number;
 }
 
 export interface Snooze extends RecordModel {

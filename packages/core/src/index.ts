@@ -5,3 +5,4 @@ export * from './format';
 export * from './reminders';
 export * from './ics';
 export * from './supplies';
+export * from './rewards';

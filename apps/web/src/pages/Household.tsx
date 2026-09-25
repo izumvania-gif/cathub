@@ -514,6 +514,13 @@ export function Household() {
       ) : null}
 
       <h2 className="text-ink-soft mb-2 mt-8 px-1 text-sm font-semibold">Кот</h2>
+      <Link
+        href="/room"
+        className="bg-card mb-4 flex min-h-14 items-center justify-between rounded-3xl px-4 font-medium"
+      >
+        Комната кота и магазин
+        <span aria-hidden>🐟 →</span>
+      </Link>
       {cat.data ? <CatForm key={cat.data.id} cat={cat.data} /> : null}
 
       <h2 className="text-ink-soft mb-2 mt-8 px-1 text-sm font-semibold">Настройки</h2>

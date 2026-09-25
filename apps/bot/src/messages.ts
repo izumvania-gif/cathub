@@ -76,11 +76,12 @@ export function resolutionLine(
   kind: 'done' | 'skipped' | 'snoozed' | 'gone',
   who: string | null,
   time: string,
+  fish = 0,
 ) {
   const name = who ? escapeHtml(who) : 'Кто-то';
   switch (kind) {
     case 'done':
-      return `✅ ${name}, ${time}`;
+      return `✅ ${name}, ${time}${fish > 0 ? ` · +${fish} 🐟` : ''}`;
     case 'skipped':
       return `⏭ Пропущено (${name}), ${time}`;
     case 'snoozed':
@@ -136,6 +137,7 @@ export function summaryText(
   }
   if (done.length)
     parts.push(`<i>Уже сделано: ${done.map((i) => escapeHtml(i.task.title)).join(', ')}</i>`);
+  if (state.fish !== undefined) parts.push(`🐟 В копилке: ${state.fish}`);
   if (appUrl) parts.push(`Приложение: ${appUrl}`);
   return { text: parts.join('\n\n'), pending: pending.length + low.length };
 }

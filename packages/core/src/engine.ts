@@ -140,6 +140,27 @@ export function slotsBetween(
   return out;
 }
 
+/**
+ * The windows that own each daily slot in [from, to]: a completion made within a slot's window
+ * covers that slot. Same partition as evaluate() uses.
+ */
+export function slotWindows(
+  schedule: Extract<Schedule, { kind: 'daily_slots' }>,
+  from: Date,
+  to: Date,
+  tz: string,
+): { slot: Date; start: number; end: number }[] {
+  const slots = slotsBetween(schedule, addDays(from, -2), addDays(to, 2), tz);
+  const starts = slots.map((s, i) => {
+    const prev = slots[i - 1];
+    const lead = s.getTime() - SLOT_LEAD_MS;
+    return prev ? Math.max(lead, prev.getTime() + (s.getTime() - prev.getTime()) / 2) : lead;
+  });
+  return slots
+    .map((slot, i) => ({ slot, start: starts[i]!, end: starts[i + 1] ?? Infinity }))
+    .filter((w) => w.slot.getTime() >= from.getTime() && w.slot.getTime() < to.getTime());
+}
+
 function evaluateSlots(
   schedule: Extract<Schedule, { kind: 'daily_slots' }>,
   completions: CompletionLike[],

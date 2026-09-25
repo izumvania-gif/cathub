@@ -1,7 +1,18 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { pb, toIso } from './pb';
-import type { Cat, Completion, HealthRecord, Household, Snooze, Supply, Task, User } from './types';
+import type {
+  Cat,
+  Completion,
+  HealthRecord,
+  Household,
+  Snooze,
+  Supply,
+  Task,
+  User,
+  FishBalance,
+  RoomItem,
+} from './types';
 import { useUser } from './auth';
 
 export const keys = {
@@ -14,6 +25,8 @@ export const keys = {
   health: ['health'] as const,
   measurements: ['measurements'] as const,
   supplies: ['supplies'] as const,
+  room: ['room'] as const,
+  fish: ['fish'] as const,
 };
 
 /** Journal / slot coverage window. Latest completion per task is fetched separately. */
@@ -154,6 +167,39 @@ export function useSupplies() {
   });
 }
 
+export function useRoomItems() {
+  const user = useUser();
+  return useQuery({
+    queryKey: [...keys.room, user?.household],
+    enabled: Boolean(user?.household),
+    queryFn: () => pb.collection('room_items').getFullList<RoomItem>({ sort: 'created' }),
+  });
+}
+
+/** Server-side fish balance (a view: fish on completions + bonuses − purchases). */
+export function useFishBalance() {
+  const user = useUser();
+  return useQuery({
+    queryKey: [...keys.fish, 'balance', user?.household],
+    enabled: Boolean(user?.household),
+    queryFn: async () => {
+      const b = await pb.collection('fish_balance').getOne<FishBalance>(user!.household);
+      return b.from_tasks + b.from_bonuses - b.spent;
+    },
+  });
+}
+
+/** Fish earned per member, all time. */
+export function useFishByUser() {
+  const user = useUser();
+  return useQuery({
+    queryKey: [...keys.fish, 'byUser', user?.household],
+    enabled: Boolean(user?.household),
+    queryFn: () =>
+      pb.collection('fish_by_user').getFullList<{ id: string; household: string; fish: number }>(),
+  });
+}
+
 /** Live updates: when anyone in the household changes something, refetch. */
 export function useRealtimeSync() {
   const qc = useQueryClient();
@@ -162,6 +208,10 @@ export function useRealtimeSync() {
     if (!user?.household) return;
     const subs: Array<[string, readonly unknown[]]> = [
       ['completions', keys.completions],
+      ['completions', keys.fish],
+      ['room_items', keys.room],
+      ['room_items', keys.fish],
+      ['fish_bonuses', keys.fish],
       ['completions', keys.measurements],
       ['health_records', keys.health],
       ['supplies', keys.supplies],

@@ -1,3 +1,4 @@
+import { ROOM_CATALOG, STARTER_ITEMS as CORE_STARTER, type RoomItemKey } from '@cathub/core';
 import type { Anim } from './sprite';
 
 /**
@@ -7,37 +8,39 @@ import type { Anim } from './sprite';
 export const ROOM_H = 76;
 export const FLOOR_Y = 70;
 
-export type ItemKey =
-  | 'window'
-  | 'tree'
-  | 'bed'
-  | 'box'
-  | 'aquarium'
-  | 'scratcher'
-  | 'mouse'
-  | 'ball'
-  | 'rug'
-  | 'plant'
-  | 'picture'
-  | 'garland';
+export type ItemKey = RoomItemKey;
 
+/** Names and what the cat does with each item; prices are core's ROOM_CATALOG. */
 export const ITEMS: Record<ItemKey, { label: string; price: number; does: string }> = {
-  window: { label: 'Окно с подоконником', price: 0, does: 'сидит на подоконнике, смотрит на птиц' },
-  box: { label: 'Коробка', price: 0, does: 'залезает и выглядывает' },
-  ball: { label: 'Клубок ниток', price: 0, does: 'охотится и гоняет' },
-  rug: { label: 'Коврик', price: 40, does: 'мнёт лапками, валяется' },
-  plant: { label: 'Цветок на подоконник', price: 50, does: 'нюхает' },
-  picture: { label: 'Картина с рыбкой', price: 60, does: '—' },
-  mouse: { label: 'Мышка на пружинке', price: 70, does: 'бьёт лапкой' },
-  scratcher: { label: 'Когтеточка', price: 80, does: 'точит когти' },
-  garland: { label: 'Гирлянда', price: 90, does: 'светится вечером' },
-  bed: { label: 'Лежанка', price: 120, does: 'спит в ней' },
-  tree: { label: 'Домик-когтеточка', price: 250, does: 'прячется в домик, спит наверху' },
-  aquarium: { label: 'Аквариум', price: 300, does: 'смотрит на рыбок' },
+  window: {
+    label: 'Окно с подоконником',
+    price: ROOM_CATALOG.window,
+    does: 'сидит на подоконнике, смотрит на птиц',
+  },
+  box: { label: 'Коробка', price: ROOM_CATALOG.box, does: 'залезает и выглядывает' },
+  ball: { label: 'Клубок ниток', price: ROOM_CATALOG.ball, does: 'охотится и гоняет' },
+  rug: { label: 'Коврик', price: ROOM_CATALOG.rug, does: 'мнёт лапками, валяется' },
+  plant: { label: 'Цветок на подоконник', price: ROOM_CATALOG.plant, does: 'нюхает' },
+  picture: { label: 'Картина с рыбкой', price: ROOM_CATALOG.picture, does: 'украшает стену' },
+  mouse: { label: 'Мышка на пружинке', price: ROOM_CATALOG.mouse, does: 'бьёт лапкой' },
+  scratcher: { label: 'Когтеточка', price: ROOM_CATALOG.scratcher, does: 'точит когти' },
+  garland: { label: 'Гирлянда', price: ROOM_CATALOG.garland, does: 'светится вечером' },
+  bed: { label: 'Лежанка', price: ROOM_CATALOG.bed, does: 'спит в ней' },
+  tree: {
+    label: 'Домик-когтеточка',
+    price: ROOM_CATALOG.tree,
+    does: 'прячется в домик, спит наверху',
+  },
+  aquarium: { label: 'Аквариум', price: ROOM_CATALOG.aquarium, does: 'смотрит на рыбок' },
 };
 
 /** What every room starts with; the rest is bought with fish. */
-export const STARTER_ITEMS: readonly ItemKey[] = ['window', 'box', 'ball'];
+export const STARTER_ITEMS = CORE_STARTER as readonly ItemKey[];
+
+/** Shop order: cheapest first. */
+export const SHOP_ORDER = (Object.keys(ITEMS) as ItemKey[]).sort(
+  (a, b) => ITEMS[a].price - ITEMS[b].price,
+);
 
 export type SpotKind =
   'perch' | 'bed' | 'hide' | 'box' | 'watch' | 'scratch' | 'bat' | 'rug' | 'ball' | 'sniff';
@@ -557,5 +560,38 @@ export function drawFront(ctx: Ctx, l: Layout, w: World) {
   if (w.catInside === 'box') {
     const it = l.items.find((i) => i.key === 'box');
     if (it) drawBoxFront(ctx, it.x);
+  }
+}
+
+/** Where to crop an item for its shop thumbnail, in room pixels: [x, y, w, h]. */
+export function previewBox(l: Layout, key: ItemKey): [number, number, number, number] {
+  const F = FLOOR_Y;
+  const x = l.items.find((i) => i.key === key)?.x ?? 0;
+  const win = l.items.find((i) => i.key === 'window')?.x ?? 0;
+  switch (key) {
+    case 'window':
+      return [x - 5, F - 58, 44, 36];
+    case 'plant':
+      return [win + 22, F - 46, 16, 22];
+    case 'tree':
+      return [x - 2, F - 40, 30, 42];
+    case 'bed':
+      return [x - 3, F - 14, 32, 17];
+    case 'box':
+      return [x - 5, F - 20, 32, 22];
+    case 'aquarium':
+      return [x - 3, F - 33, 34, 35];
+    case 'scratcher':
+      return [x - 6, F - 32, 22, 34];
+    case 'mouse':
+      return [x - 5, F - 19, 18, 21];
+    case 'ball':
+      return [x - 5, F - 9, 20, 12];
+    case 'rug':
+      return [x - 2, F - 8, W.rug + 4, 14];
+    case 'picture':
+      return [x - 3, F - 61, 22, 18];
+    case 'garland':
+      return [0, 0, 44, 14];
   }
 }

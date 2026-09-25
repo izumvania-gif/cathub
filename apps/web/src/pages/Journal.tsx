@@ -113,6 +113,7 @@ export function Journal() {
                         ) : null}
                       </span>
                       <span className="text-ink-soft flex items-center gap-2 text-sm tabular-nums">
+                        {c.fish > 0 ? <span className="text-xs">+{c.fish} 🐟</span> : null}
                         <Avatar name={c.expand?.user?.name} />
                         {time(c.done_at)}
                       </span>

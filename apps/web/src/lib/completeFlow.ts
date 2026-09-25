@@ -1,3 +1,4 @@
+import { fishForStatus, taskWeight } from '@cathub/core';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useTaskActions } from './actions';
@@ -10,7 +11,12 @@ export function useCompleteFlow() {
   const actions = useTaskActions();
   const [confirm, setConfirm] = useState<BoardItem | null>(null);
 
-  const run = async (task: Task, opts?: Parameters<typeof actions.complete>[1]) => {
+  const run = async (
+    task: Task,
+    opts?: Parameters<typeof actions.complete>[1],
+    /** Fish this mark brings, if known (shown in the toast). */
+    fish = 0,
+  ) => {
     try {
       const rec = await actions.complete(task, opts);
       const label = rec.queued
@@ -18,7 +24,8 @@ export function useCompleteFlow() {
         : opts?.kind === 'skipped'
           ? 'Пропущено'
           : 'Отмечено';
-      toast.success(`${label}: ${task.title}`, {
+      const reward = fish > 0 && opts?.kind !== 'skipped' ? ` · +${fish} 🐟` : '';
+      toast.success(`${label}: ${task.title}${reward}`, {
         action: { label: 'Отменить', onClick: () => void actions.undo(rec.id).catch(() => {}) },
       });
       navigator.vibrate?.(12);
@@ -29,7 +36,7 @@ export function useCompleteFlow() {
 
   const request = (item: BoardItem) => {
     if (item.covered && item.covered.kind === 'done') setConfirm(item);
-    else void run(item.task);
+    else void run(item.task, undefined, fishForStatus(item.ev.status, taskWeight(item.task)));
   };
 
   return { run, request, confirm, setConfirm };

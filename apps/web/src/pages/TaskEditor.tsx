@@ -1,4 +1,9 @@
 import {
+  FISH_PER_WEIGHT,
+  ON_TIME_BONUS,
+  taskWeight,
+  WEIGHT_LABELS,
+  type Weight,
   CATEGORY_LABELS,
   describeSchedule,
   isTimeOfDay,
@@ -59,6 +64,7 @@ interface Draft {
   who: 'anyone' | 'one' | 'rotation';
   assignee: string;
   rotation: string[];
+  weight: Weight;
 }
 
 function draftFrom(task: Task | undefined): Draft {
@@ -85,6 +91,7 @@ function draftFrom(task: Task | undefined): Draft {
     who: task?.rotation?.length ? 'rotation' : task?.assignee ? 'one' : 'anyone',
     assignee: task?.assignee ?? '',
     rotation: task?.rotation ?? [],
+    weight: taskWeight(task ?? {}),
   };
 }
 
@@ -201,6 +208,7 @@ function Editor({ task }: { task?: Task }) {
                 : d.rotation[0]
               : '',
         rotation: d.who === 'rotation' ? d.rotation : [],
+        weight: d.weight,
       };
       if (task) await pb.collection('tasks').update(task.id, body);
       else
@@ -449,6 +457,22 @@ function Editor({ task }: { task?: Task }) {
         <p className="bg-tint rounded-2xl px-4 py-3 text-sm">
           {typeof preview === 'string' ? preview : `Итого: ${describeSchedule(preview)}`}
         </p>
+
+        <div>
+          <span className="text-ink-soft mb-1.5 block text-sm font-medium">Сложность</span>
+          <Segmented
+            value={String(d.weight) as '1' | '2' | '3'}
+            onChange={(v) => set('weight', Number(v) as Weight)}
+            options={([1, 2, 3] as const).map((w) => ({
+              value: String(w) as '1' | '2' | '3',
+              label: WEIGHT_LABELS[w],
+            }))}
+          />
+          <p className="text-ink-soft mt-1.5 text-sm">
+            {d.weight * FISH_PER_WEIGHT} 🐟 за отметку, вовремя —{' '}
+            {Math.round(d.weight * FISH_PER_WEIGHT * ON_TIME_BONUS)} 🐟
+          </p>
+        </div>
 
         <div>
           <span className="text-ink-soft mb-1.5 block text-sm font-medium">Кто делает</span>

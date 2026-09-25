@@ -67,6 +67,9 @@ async function screens(page: Page) {
   await page.getByRole('button', { name: 'Запись', exact: true }).click();
   await page.waitForTimeout(500);
   found.push(...(await scan(page, 'health-record-sheet')));
+  await page.goto('/room');
+  await expect(page.getByRole('heading', { name: 'Магазин' })).toBeVisible();
+  found.push(...(await scan(page, 'room-shop')));
   return found;
 }
 

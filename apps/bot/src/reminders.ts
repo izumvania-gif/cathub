@@ -3,7 +3,13 @@ import {
   digestDue,
   evaluate,
   isQuietTime,
+  localDate,
+  localDayBounds,
+  PERFECT_DAY_FISH,
+  perfectDay,
   reminderPlan,
+  rewardFor,
+  taskWeight,
   type CompletionLike,
   type QuietHours,
 } from '@cathub/core';
@@ -29,6 +35,8 @@ function snoozeOf(state: HouseholdState, taskId: string) {
 export class ReminderService {
   /** Keys sent during this process lifetime, in case writing the log failed. */
   private sentInProcess = new Set<string>();
+  /** Household days already checked for the perfect-day bonus. */
+  private checkedDays = new Set<string>();
 
   constructor(
     private readonly api: Api,
@@ -38,12 +46,71 @@ export class ReminderService {
   /** One pass: send due reminders and digests, then update messages whose task is now handled. */
   async tick(now = new Date()): Promise<void> {
     const states = await this.db.loadAll();
+    await this.rewardPending(states);
+    await this.perfectDays(states, now);
     const sent = await this.db.sentKeys();
     for (const state of states) {
       await this.sendDue(state, sent, now);
       await this.sendDigests(state, now);
     }
     await this.resolveHandled(states, now);
+  }
+
+  /**
+   * Prices new completions in fish 🐟 (core's rewardFor, from the task's status when it was
+   * done) and stores the amount on the completion; the balance is a view over these.
+   */
+  async rewardPending(states: HouseholdState[]): Promise<void> {
+    for (const state of states) {
+      const tz = state.household.timezone || DEFAULT_TZ;
+      for (const c of state.completions) {
+        if (c.rewarded) continue;
+        const task = state.tasks.find((t) => t.id === c.task);
+        if (!task) continue;
+        const fish = rewardFor({
+          schedule: task.schedule,
+          weight: taskWeight(task),
+          others: completionsOf(state, task.id),
+          completion: { doneAt: c.done_at, kind: c.kind },
+          tz,
+        });
+        try {
+          await this.db.setReward(c.id, fish);
+          c.fish = fish;
+          c.rewarded = true;
+        } catch (err) {
+          log.warn(`cannot store reward: ${err instanceof Error ? err.message : err}`);
+        }
+      }
+    }
+  }
+
+  /** +10 🐟 for yesterday if every daily chore slot was covered. */
+  private async perfectDays(states: HouseholdState[], now: Date) {
+    for (const state of states) {
+      const tz = state.household.timezone || DEFAULT_TZ;
+      const date = localDate(new Date(now.getTime() - 86_400_000), tz);
+      const key = `${state.household.id}:${date}`;
+      if (this.checkedDays.has(key)) continue;
+      const [start, end] = localDayBounds(date, tz);
+      const tasks = state.tasks
+        .filter((t) => Date.parse(t.created.replace(' ', 'T')) < start.getTime())
+        .map((t) => ({ schedule: t.schedule, completions: completionsOf(state, t.id) }));
+      try {
+        if (perfectDay(tasks, start, end, tz)) {
+          const added = await this.db.addBonus(
+            state.household.id,
+            date,
+            'perfect_day',
+            PERFECT_DAY_FISH,
+          );
+          if (added) log.info(`perfect day ${date} for household ${state.household.id}`);
+        }
+        this.checkedDays.add(key);
+      } catch (err) {
+        log.warn(`perfect day check failed: ${err instanceof Error ? err.message : err}`);
+      }
+    }
   }
 
   /**
@@ -174,7 +241,7 @@ export class ReminderService {
         .sort((a, b) => b.done_at.localeCompare(a.done_at))[0];
       const who = handled ? (state.users.find((u) => u.id === handled.user)?.name ?? null) : null;
       const line = handled
-        ? resolutionLine(handled.kind, who, timeIn(tz, new Date(handled.done_at)))
+        ? resolutionLine(handled.kind, who, timeIn(tz, new Date(handled.done_at)), handled.fish)
         : resolutionLine('gone', null, '');
       await this.finish(r, line);
     }

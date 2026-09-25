@@ -74,17 +74,22 @@ export class PocketBaseClient {
   async loadAll(): Promise<HouseholdState[]> {
     await this.ensureAuth();
     const since = toPbDate(new Date(Date.now() - RECENT_DAYS * 86_400_000));
-    const [households, users, cats, tasks, recent, snoozes, supplies] = await Promise.all([
-      this.pb.collection('households').getFullList<HouseholdRec>(),
-      this.pb.collection('users').getFullList<UserRec>({ filter: 'household != ""' }),
-      this.pb.collection('cats').getFullList<CatRec>({ sort: 'created' }),
-      this.pb.collection('tasks').getFullList<TaskRec>({ filter: 'archived = false' }),
-      this.pb
-        .collection('completions')
-        .getFullList<CompletionRec>({ filter: this.pb.filter('done_at >= {:since}', { since }) }),
-      this.pb.collection('snoozes').getFullList<SnoozeRec>(),
-      this.pb.collection('supplies').getFullList<SupplyRec>(),
-    ]);
+    const [households, users, cats, tasks, recent, snoozes, supplies, balances] = await Promise.all(
+      [
+        this.pb.collection('households').getFullList<HouseholdRec>(),
+        this.pb.collection('users').getFullList<UserRec>({ filter: 'household != ""' }),
+        this.pb.collection('cats').getFullList<CatRec>({ sort: 'created' }),
+        this.pb.collection('tasks').getFullList<TaskRec>({ filter: 'archived = false' }),
+        this.pb
+          .collection('completions')
+          .getFullList<CompletionRec>({ filter: this.pb.filter('done_at >= {:since}', { since }) }),
+        this.pb.collection('snoozes').getFullList<SnoozeRec>(),
+        this.pb.collection('supplies').getFullList<SupplyRec>(),
+        this.pb
+          .collection('fish_balance')
+          .getFullList<{ id: string; from_tasks: number; from_bonuses: number; spent: number }>(),
+      ],
+    );
     const withRecent = new Set(recent.map((c) => c.task));
     const older = await Promise.all(
       tasks.filter((t) => !withRecent.has(t.id)).map((t) => this.latestOlder(t.id)),
@@ -104,6 +109,10 @@ export class PocketBaseClient {
       supplies: supplies
         .filter((s) => s.household === household.id)
         .map((s) => ({ ...s, stock_at: toIso(s.stock_at) })),
+      fish: (() => {
+        const b = balances.find((x) => x.id === household.id);
+        return b ? b.from_tasks + b.from_bonuses - b.spent : undefined;
+      })(),
     }));
   }
 
@@ -210,6 +219,25 @@ export class PocketBaseClient {
     this.olderCache.delete(task.id);
     await this.clearSnoozes(task.id);
     return { ...rec, done_at: toIso(rec.done_at) };
+  }
+
+  // ── fish 🐟 ───────────────────────────────────────────────────────────────
+
+  async setReward(completionId: string, fish: number): Promise<void> {
+    await this.ensureAuth();
+    await this.pb.collection('completions').update(completionId, { fish, rewarded: true });
+  }
+
+  /** Adds a bonus once per household, day and kind; false if it already existed. */
+  async addBonus(household: string, date: string, kind: string, fish: number): Promise<boolean> {
+    await this.ensureAuth();
+    try {
+      await this.pb.collection('fish_bonuses').create({ household, date, kind, fish });
+      return true;
+    } catch (err) {
+      if (err instanceof ClientResponseError && err.status === 400) return false; // unique index
+      throw err;
+    }
   }
 
   async snooze(task: TaskRec, user: UserRec, until: Date): Promise<void> {

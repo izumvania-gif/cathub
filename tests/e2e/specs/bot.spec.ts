@@ -123,8 +123,10 @@ test('due task → reminder → "Сделано" records the completion and edit
     (c) =>
       c.method === 'editMessageText' &&
       String(c.params.text).includes('✅ Маша') &&
+      // A litter task (weight 2) done on time: 10 × 1.5.
+      String(c.params.text).includes('+15 🐟') &&
       String(c.params.text).includes('Сменить наполнитель'),
-    'reminder edited with who did it',
+    'reminder edited with who did it and the fish earned',
   );
 
   const comps = await api<{ items: Array<{ user: string; kind: string }> }>(
