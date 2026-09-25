@@ -1,0 +1,15 @@
+# Amvera project config (must stay at the repo root). See docs/DEPLOY_AMVERA.md.
+meta:
+  environment: docker
+  toolchain:
+    name: docker
+    version: latest
+build:
+  dockerfile: Dockerfile
+  skip: false
+run:
+  persistenceMount: /data
+  containerPort: 8090
+  # Stage-0 experiment: keep at most one instance so two processes never open SQLite at once.
+  # Seen in real amvera.yml files but undocumented; uncomment and check the run log.
+  # singleton: true

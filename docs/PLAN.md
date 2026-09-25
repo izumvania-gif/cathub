@@ -322,7 +322,7 @@ Telegram в РФ нестабилен, поэтому **вход через Tele
 - [ ] Этап 0 на Amvera: «пустой» PocketBase + тестовый бот, проверки из [DEPLOY_AMVERA.md](DEPLOY_AMVERA.md) §2
 - [x] `CLAUDE.md`
 - [x] Доступ на запись в GitHub-репозиторий, push в `main`
-- [ ] Каркас монорепо: pnpm, TS, ESLint/Prettier, Vitest, CI в GitHub Actions
+- [x] Каркас монорепо: pnpm, TS, ESLint/Prettier, Vitest, CI в GitHub Actions, Dockerfile + `amvera.yml`, страница `/#/diag`
 - [ ] Дизайн: палитра, шрифты, 3–4 макета ключевых экранов (можно прямо кодом в Storybook или Ladle)
 
 ### Фаза 1 — Ядро и MVP-интерфейс
@@ -331,7 +331,7 @@ Telegram в РФ нестабилен, поэтому **вход через Tele
 - [ ] Web: auth, онбординг, экран «Сегодня», отметка, undo, «задним числом», журнал
 - [ ] Редактор дела и расписания
 - [ ] PWA: манифест, иконки, установка, safe-area
-- [ ] `Dockerfile`, `amvera.yml`, `deploy/entrypoint.sh`, деплой на Amvera
+- [ ] Продакшен-деплой на Amvera (свой домен, бэкапы в S3)
 
 ### Фаза 2 — Telegram
 - [ ] Бот: привязка, напоминания, callback-кнопки, редактирование сообщений
