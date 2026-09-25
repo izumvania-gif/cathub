@@ -1,0 +1,67 @@
+import type { Schedule } from '@cathub/core';
+
+export interface HouseholdRec {
+  id: string;
+  name: string;
+  timezone: string;
+}
+export interface UserRec {
+  id: string;
+  name: string;
+  email: string;
+  household: string;
+  telegram_chat_id: string;
+  telegram_username: string;
+  notify: boolean;
+  quiet_hours: { from: string; to: string } | null;
+}
+export interface CatRec {
+  id: string;
+  household: string;
+  name: string;
+}
+export interface TaskRec {
+  id: string;
+  household: string;
+  title: string;
+  emoji: string;
+  category: string;
+  schedule: Schedule;
+  assignee: string;
+  medical: boolean;
+}
+export interface CompletionRec {
+  id: string;
+  household: string;
+  task: string;
+  user: string;
+  done_at: string;
+  kind: 'done' | 'skipped';
+}
+export interface SnoozeRec {
+  id: string;
+  household: string;
+  task: string;
+  until: string;
+}
+export interface ReminderLogRec {
+  id: string;
+  task: string;
+  occurrence_at: string;
+  stage: 'before' | 'due' | 'overdue';
+  chat_id: string;
+  message_id: number;
+  sent_at: string;
+  resolved: boolean;
+  text: string;
+}
+
+/** Everything the reminder loop needs for one household. */
+export interface HouseholdState {
+  household: HouseholdRec;
+  cat: CatRec | null;
+  users: UserRec[];
+  tasks: TaskRec[];
+  completions: CompletionRec[];
+  snoozes: SnoozeRec[];
+}

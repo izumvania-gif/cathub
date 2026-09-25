@@ -1,7 +1,9 @@
 import { GrammyError, type Bot } from 'grammy';
 import { config } from './config';
+import { registerHandlers } from './handlers';
 import { log } from './log';
 import { PocketBaseClient } from './pocketbase';
+import { ReminderService } from './reminders';
 import { backoffMs, sleep } from './retry';
 import { createBot, probeTelegram, type TelegramProbe } from './telegram';
 
@@ -10,21 +12,9 @@ const uptimeS = () => Math.round((Date.now() - startedAt) / 1000);
 let stopping = false;
 let lastProbe: TelegramProbe | undefined;
 
-function registerHandlers(bot: Bot) {
-  bot.command('start', (ctx) =>
-    ctx.reply(
-      'Привет! Это бот CatHub. Скоро здесь будут напоминания про кота 🐈\n\n/ping — проверить связь',
-    ),
-  );
-  bot.command('ping', (ctx) => {
-    const probe = lastProbe
-      ? `${lastProbe.ok ? 'ok' : 'ошибка'}, ${lastProbe.ms} мс`
-      : 'ещё не было';
-    return ctx.reply(
-      `pong 🏓\nверсия: ${config.version}\nаптайм: ${uptimeS()} с\nпоследняя проверка Telegram: ${probe}`,
-    );
-  });
-  bot.catch((err) => log.error(`handler error for update ${err.ctx.update.update_id}`, err.error));
+function statusText() {
+  const probe = lastProbe ? `${lastProbe.ok ? 'ok' : 'ошибка'}, ${lastProbe.ms} мс` : 'ещё не было';
+  return `pong 🏓\nверсия: ${config.version}\nаптайм: ${uptimeS()} с\nпоследняя проверка Telegram: ${probe}`;
 }
 
 /** Long polling that survives network failures and 409s during container restarts. */
@@ -76,17 +66,36 @@ async function heartbeatLoop(pb: PocketBaseClient) {
   }
 }
 
+async function reminderLoop(reminders: ReminderService) {
+  while (!stopping) {
+    try {
+      await reminders.tick();
+    } catch (err) {
+      log.warn('reminder pass failed', err);
+    }
+    await sleep(config.reminderIntervalMs);
+  }
+}
+
 async function main() {
   log.info(
     `cathub bot ${config.version} starting; pocketbase=${config.pbUrl}, apiRoot=${config.telegramApiRoot ?? 'default'}`,
   );
   const pb = new PocketBaseClient();
-  if (!pb.enabled) log.warn('PB_SUPERUSER_EMAIL/PASSWORD not set; heartbeats disabled');
+  if (!pb.enabled)
+    log.warn('PB_SUPERUSER_EMAIL/PASSWORD not set; heartbeats and reminders disabled');
 
   let bot: Bot | undefined;
+  const loops: Promise<unknown>[] = [heartbeatLoop(pb)];
   if (config.botToken) {
     bot = createBot(config.botToken);
-    registerHandlers(bot);
+    const reminders = new ReminderService(bot.api, pb);
+    registerHandlers(bot, { db: pb, reminders, status: statusText });
+    bot.catch((err) =>
+      log.error(`handler error for update ${err.ctx.update.update_id}`, err.error),
+    );
+    loops.push(runPolling(bot));
+    if (pb.enabled) loops.push(reminderLoop(reminders));
   } else {
     log.warn('BOT_TOKEN not set; running without Telegram');
   }
@@ -100,7 +109,7 @@ async function main() {
   process.once('SIGTERM', () => void shutdown('SIGTERM'));
   process.once('SIGINT', () => void shutdown('SIGINT'));
 
-  await Promise.all([bot ? runPolling(bot) : Promise.resolve(), heartbeatLoop(pb)]);
+  await Promise.all(loops);
 }
 
 process.on('unhandledRejection', (err) => log.error('unhandled rejection', err));

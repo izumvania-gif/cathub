@@ -1,10 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Copy, RefreshCw, Share2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Link } from 'wouter';
 import { Avatar, Button, Field, Input, PageHeader, Toggle } from '../components/ui';
-import { logout, useUser } from '../lib/auth';
+import { logout, refreshAuth, useUser } from '../lib/auth';
 import { inviteLink } from '../lib/invite';
 import { errorMessage, pb, toIso, toPbDate } from '../lib/pb';
 import { keys, useCat, useHousehold, useMembers } from '../lib/queries';
@@ -156,6 +156,75 @@ function CatForm({ cat }: { cat: Cat }) {
   );
 }
 
+function TelegramCard() {
+  const user = useUser();
+  const [busy, setBusy] = useState(false);
+  const linked = Boolean(user?.telegram_chat_id);
+
+  // The link is confirmed in Telegram; pick up the change when the user comes back.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshAuth().catch(() => {});
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
+  const connect = async () => {
+    setBusy(true);
+    try {
+      const { url } = await pb.send<{ url: string }>('/api/cathub/telegram/link', {
+        method: 'POST',
+      });
+      window.location.href = url;
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy(true);
+    try {
+      await pb.send('/api/cathub/telegram/unlink', { method: 'POST' });
+      await refreshAuth();
+      toast('Напоминания в Telegram отключены');
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="bg-card rounded-3xl p-4">
+      <p className="font-medium">Напоминания в Telegram</p>
+      {linked ? (
+        <>
+          <p className="text-ink-soft mt-1 text-sm">
+            Подключено{user?.telegram_username ? ` (@${user.telegram_username})` : ''}. Бот пишет,
+            когда пора что-то сделать; отмечать можно прямо в чате. Ночью (23:00–08:00) он молчит.
+          </p>
+          <Button variant="secondary" className="mt-3 w-full" busy={busy} onClick={disconnect}>
+            Отключить
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className="text-ink-soft mt-1 text-sm">
+            Бот напомнит о кормлении, лотке и прививках, а отметить «сделано» можно прямо из
+            сообщения.
+          </p>
+          <Button className="mt-3 w-full" busy={busy} onClick={connect}>
+            Подключить Telegram
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function Household() {
   const user = useUser();
   const household = useHousehold();
@@ -231,12 +300,7 @@ export function Household() {
             ))}
           </select>
         </Field>
-        <div className="bg-card rounded-3xl p-4">
-          <p className="font-medium">Напоминания в Telegram</p>
-          <p className="text-ink-soft mt-1 text-sm">
-            Скоро: бот будет напоминать о делах и принимать отметки прямо из чата.
-          </p>
-        </div>
+        <TelegramCard />
         <Button variant="danger" onClick={logout}>
           Выйти ({user?.email})
         </Button>

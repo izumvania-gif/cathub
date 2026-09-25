@@ -7,6 +7,9 @@ export interface User extends RecordModel {
   avatar: string;
   household: string;
   role: '' | 'owner' | 'member';
+  telegram_chat_id: string;
+  telegram_username: string;
+  notify: boolean;
 }
 
 export interface Household extends RecordModel {

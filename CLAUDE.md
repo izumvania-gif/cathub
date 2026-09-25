@@ -8,10 +8,10 @@ CatHub is a mobile-first PWA for a household (several people, one cat) to track 
 feeding, litter, grooming, parasite treatments, vaccinations, vet visits. Reminders go through a
 Telegram bot. The owner and users are in Russia. The UI language is Russian.
 
-**Current state: Phase 1 (MVP UI) mostly done.** Working: the schedule engine in `packages/core`,
-the PocketBase schema and household routes, and the web app (login, onboarding, Today, journal,
-task list and editor, household settings, `/diag`). The bot still only answers `/start` and
-`/ping` and writes heartbeats; reminders are Phase 2. The source of truth for scope, data model, and phases is
+**Current state: Phases 1–2 mostly done.** Working: the schedule engine in `packages/core`, the
+PocketBase schema and household/Telegram routes, the web app (login, onboarding, Today, journal,
+task list and editor, household settings, `/diag`), and the bot (linking via `/start <token>`,
+reminders with done/snooze/skip buttons, `/today`). The source of truth for scope, data model, and phases is
 `docs/PLAN.md`. `docs/REFERENCES.md` holds competitors, OSS, and vet-care frequency sources.
 `docs/HOSTING_RU.md` holds the Russia-specific hosting analysis. `docs/DEPLOY_AMVERA.md` is the
 chosen deployment (Amvera, Moscow region). `docs/DEPLOY_YC.md` is a rejected Yandex Cloud option,
@@ -57,10 +57,14 @@ pnpm-workspaces monorepo:
   PocketBase hooks.
 - `apps/web`: React + Vite + TypeScript PWA (Tailwind v4, shadcn/ui, Motion, TanStack Query,
   vite-plugin-pwa, date-fns with `ru` locale).
-- `apps/bot`: Node + TypeScript + grammY. Runs a once-a-minute scheduler that calls
-  `reminderPlan` from core, sends Telegram reminders with inline "done/snooze/skip" buttons,
-  subscribes to `completions` via PocketBase realtime, and edits already-sent messages so
-  household members see who did it (prevents double feeding).
+- `apps/bot`: Node + TypeScript + grammY. `ReminderService.tick()` (every 30 s) loads all
+  households as superuser, asks core's `reminderPlan` which reminder is due, and sends each
+  (task, occurrence, stage, chat) once. `reminder_log` has a unique index on that tuple and stores
+  the message text. The same tick edits open reminders whose occurrence was handled (in the app or
+  another chat) to "✅ Петя, 20:03" — polling, not realtime, since Node has no EventSource.
+  Callback data is `<d|s|z>:<taskId>:<occurrence seconds>`. Linking: the web app calls
+  `POST /api/cathub/telegram/link` (needs `TELEGRAM_BOT_USERNAME`), and the bot consumes the
+  token from `telegram_links`.
 - `pocketbase/`: PocketBase backend (auth, SQLite, realtime, files). Schema lives in
   `pb_migrations` and access control in API rules. Every record is scoped to the user's `household`.
   Users can't set `household`/`role` through the API; membership changes go through the custom
