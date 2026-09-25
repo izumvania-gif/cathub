@@ -168,3 +168,33 @@ test('supplies: track food, see the low warning on Today, top it up', async ({ p
   await expect(page.getByText('Запас пополнен')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Заканчивается' })).toHaveCount(0);
 });
+
+test('offline: marks are queued, the app reopens without network, and they sync later', async ({
+  page,
+  context,
+}) => {
+  await onboard(page);
+  // Let the service worker install and the query cache persist.
+  await page.waitForFunction(() => navigator.serviceWorker?.controller !== null || true);
+  await page.waitForTimeout(2500);
+
+  await context.setOffline(true);
+  await page.getByRole('button', { name: 'Полностью сменить наполнитель: отметить' }).click();
+  await expect(page.getByText('Сохранено без сети, отправим позже')).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('Нет сети');
+  await expect(
+    page.getByRole('button', { name: 'Полностью сменить наполнитель: отметить ещё раз' }),
+  ).toBeVisible();
+
+  // Reopen without network: the shell comes from the service worker, data from the saved cache.
+  await page.reload();
+  await expect(page.getByLabel('Миска: Барсик')).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('1 отметка отправится');
+
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await expect(page.getByText('Отправлено отметок: 1')).toBeVisible();
+  await expect(page.getByRole('status')).toHaveCount(0);
+  await page.getByRole('link', { name: 'Журнал' }).click();
+  await expect(page.getByRole('button', { name: /Полностью сменить наполнитель/ })).toBeVisible();
+});

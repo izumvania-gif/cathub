@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { pb, toPbDate } from './pb';
+import { isNetworkError, outbox } from './outbox';
 import { keys } from './queries';
 import type { Completion, Task } from './types';
 
@@ -21,25 +22,36 @@ export function useTaskActions() {
     await Promise.all(list.map((s) => pb.collection('snoozes').delete(s.id)));
   };
 
+  /** Records a completion; without network it's queued (see lib/outbox.ts) and `queued` is true. */
   const complete = async (
     task: Task,
     opts: { at?: Date; kind?: 'done' | 'skipped'; value?: number | null; note?: string } = {},
-  ) => {
-    const record = await pb.collection('completions').create<Completion>({
+  ): Promise<{ id: string; queued: boolean }> => {
+    const body = {
       household: task.household,
       task: task.id,
       user: pb.authStore.record!.id,
       done_at: toPbDate(opts.at ?? new Date()),
-      kind: opts.kind ?? 'done',
+      kind: opts.kind ?? ('done' as const),
       ...(opts.value != null ? { value: opts.value } : {}),
       ...(opts.note ? { note: opts.note } : {}),
-    });
-    await clearSnooze(task).catch(() => {});
-    await refresh();
-    return record;
+    };
+    try {
+      const record = await pb.collection('completions').create<Completion>(body);
+      await clearSnooze(task).catch(() => {});
+      await refresh();
+      return { id: record.id, queued: false };
+    } catch (err) {
+      if (!isNetworkError(err)) throw err;
+      return { id: outbox.add(body).localId, queued: true };
+    }
   };
 
   const undo = async (completionId: string) => {
+    if (completionId.startsWith('local-')) {
+      outbox.remove(completionId);
+      return;
+    }
     await pb.collection('completions').delete(completionId);
     await refresh();
   };

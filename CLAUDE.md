@@ -34,7 +34,7 @@ pnpm build         # web → apps/web/dist, bot → apps/bot/dist/index.js (esbu
 pnpm --filter @cathub/core exec vitest run src/schedule.test.ts   # single test file
 pnpm --filter @cathub/core exec vitest run -t "parseTimeOfDay"     # single test by name
 pnpm e2e           # end-to-end: real PocketBase + built web app + bot against a Telegram mock (run `pnpm build` first)
-pnpm e2e -- --project=bot -g "digest"   # one e2e project / test by name
+pnpm --filter @cathub/e2e exec playwright test --project=bot -g "digest"   # one project / test by name
 pnpm --filter @cathub/web icons  # regenerate PWA PNG icons from apps/web/public/icon.svg
 docker build -t cathub .         # production image (same as Amvera builds)
 ```

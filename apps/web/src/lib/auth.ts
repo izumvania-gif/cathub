@@ -32,5 +32,14 @@ export async function refreshAuth() {
 }
 
 export function logout() {
+  // Don't leave the previous account's data and unsent marks on this device.
+  for (const key of ['cathub.cache', 'cathub.outbox']) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  }
   pb.authStore.clear();
+  window.location.assign('/');
 }

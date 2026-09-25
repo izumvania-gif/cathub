@@ -13,7 +13,11 @@ export function useCompleteFlow() {
   const run = async (task: Task, opts?: Parameters<typeof actions.complete>[1]) => {
     try {
       const rec = await actions.complete(task, opts);
-      const label = opts?.kind === 'skipped' ? 'Пропущено' : 'Отмечено';
+      const label = rec.queued
+        ? 'Сохранено без сети, отправим позже'
+        : opts?.kind === 'skipped'
+          ? 'Пропущено'
+          : 'Отмечено';
       toast.success(`${label}: ${task.title}`, {
         action: { label: 'Отменить', onClick: () => void actions.undo(rec.id).catch(() => {}) },
       });

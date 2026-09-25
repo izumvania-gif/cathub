@@ -1,7 +1,10 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
+import { QueryClient } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useEffect } from 'react';
 import { Toaster } from 'sonner';
 import { Redirect, Route, Switch, useLocation } from 'wouter';
+import { OfflineBanner } from './components/OfflineBanner';
 import { TabBar } from './components/TabBar';
 import { refreshAuth, useUser } from './lib/auth';
 import { useRealtimeSync } from './lib/queries';
@@ -16,8 +19,25 @@ import { TaskEditor } from './pages/TaskEditor';
 import { Tasks } from './pages/Tasks';
 import { Today } from './pages/Today';
 
+const WEEK = 7 * 24 * 60 * 60 * 1000;
+
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: true } },
+  defaultOptions: {
+    // Kept for a week so the app opens offline with the last known data.
+    queries: {
+      staleTime: 30_000,
+      gcTime: WEEK,
+      retry: 1,
+      refetchOnWindowFocus: true,
+      networkMode: 'offlineFirst',
+    },
+  },
+});
+
+const persister = createSyncStoragePersister({
+  storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+  key: 'cathub.cache',
+  throttleTime: 2000,
 });
 
 /** /join/CODE: remember the code, then continue to login/onboarding. */
@@ -38,6 +58,7 @@ function Shell() {
   useRealtimeSync();
   return (
     <>
+      <OfflineBanner />
       <Switch>
         <Route path="/" component={Today} />
         <Route path="/journal" component={Journal} />
@@ -71,9 +92,12 @@ function Routes() {
 
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
+    <PersistQueryClientProvider
+      client={queryClient}
+      persistOptions={{ persister, maxAge: WEEK, buster: 'v1' }}
+    >
       <Routes />
       <Toaster position="top-center" richColors closeButton={false} offset={16} />
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   );
 }

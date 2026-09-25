@@ -1,5 +1,7 @@
 import { evaluate, urgencyCompare, type Evaluation } from '@cathub/core';
 import { useEffect, useMemo, useState } from 'react';
+import { useOutbox } from './outbox';
+import { toIso } from './pb';
 import { useCompletions, useHousehold, useSnoozes, useTasks } from './queries';
 import type { Completion, Task } from './types';
 
@@ -35,15 +37,33 @@ export function useBoard() {
   const snoozes = useSnoozes();
   const tz = useTz();
   const tick = useNow();
+  const queued = useOutbox();
+
   // "Now" is never earlier than the last data load: a completion made a second ago must not
   // look like it's in the future (the engine ignores those) until the next tick.
-  const nowMs = Math.max(tick.getTime(), completions.dataUpdatedAt, snoozes.dataUpdatedAt);
+  const nowMs = Math.max(
+    tick.getTime(),
+    completions.dataUpdatedAt,
+    snoozes.dataUpdatedAt,
+    ...queued.map((q) => Date.parse(toIso(q.done_at))),
+  );
 
   const items = useMemo<BoardItem[]>(() => {
     if (!tasks.data || !completions.data) return [];
     const now = new Date(nowMs);
     const byTask = new Map<string, Completion[]>();
-    for (const c of completions.data) {
+    // Offline marks count right away (they look like regular completions without `expand`).
+    const pending = queued.map(
+      (q) =>
+        ({
+          ...q,
+          id: q.localId,
+          done_at: toIso(q.done_at),
+          value: q.value ?? 0,
+          note: q.note ?? '',
+        }) as unknown as Completion,
+    );
+    for (const c of [...completions.data, ...pending]) {
       const list = byTask.get(c.task) ?? [];
       list.push(c);
       byTask.set(c.task, list);
@@ -67,7 +87,7 @@ export function useBoard() {
         };
       })
       .sort((a, b) => urgencyCompare(a.ev, b.ev));
-  }, [tasks.data, completions.data, snoozes.data, nowMs, tz]);
+  }, [tasks.data, completions.data, snoozes.data, queued, nowMs, tz]);
 
   return {
     items,
