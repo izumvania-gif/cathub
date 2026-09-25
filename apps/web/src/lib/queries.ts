@@ -4,6 +4,7 @@ import { pb, toIso } from './pb';
 import type {
   AbsenceRec,
   DutyOverrideRec,
+  HealthTipRec,
   Cat,
   Completion,
   HealthRecord,
@@ -31,6 +32,7 @@ export const keys = {
   overrides: ['overrides'] as const,
   absences: ['absences'] as const,
   fish: ['fish'] as const,
+  healthTips: ['healthTips'] as const,
 };
 
 /** Journal / slot coverage window. Latest completion per task is fetched separately. */
@@ -139,6 +141,16 @@ export function useHealthRecords() {
           .collection('health_records')
           .getFullList<HealthRecord>({ sort: '-date,-created', expand: 'user' })
       ).map((r) => ({ ...r, date: toIso(r.date) })),
+  });
+}
+
+/** What the household did with age-based tips (hid, added to chores, done). */
+export function useHealthTips() {
+  const user = useUser();
+  return useQuery({
+    queryKey: [...keys.healthTips, user?.household],
+    enabled: Boolean(user?.household),
+    queryFn: () => pb.collection('health_tips').getFullList<HealthTipRec>(),
   });
 }
 
@@ -254,6 +266,7 @@ export function useRealtimeSync() {
       ['absences', keys.absences],
       ['completions', keys.measurements],
       ['health_records', keys.health],
+      ['health_tips', keys.healthTips],
       ['supplies', keys.supplies],
       ['tasks', keys.tasks],
       ['snoozes', keys.snoozes],

@@ -23,6 +23,15 @@ export interface CatRec {
   id: string;
   household: string;
   name: string;
+  birth_date: string;
+  neutered: boolean;
+}
+
+export interface HealthRec {
+  household: string;
+  type: 'vaccination' | 'visit' | 'medication' | 'lab' | 'other';
+  date: string;
+  title: string;
 }
 export interface TaskRec {
   id: string;
@@ -111,4 +120,8 @@ export interface HouseholdState {
   fish?: number;
   overrides: OverrideRec[];
   absences: AbsenceRec[];
+  /** For age-based health tips (core's healthPlan). */
+  health?: HealthRec[];
+  /** Tip keys the family already hid, added to chores or did. */
+  handledTips?: string[];
 }

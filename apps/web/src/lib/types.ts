@@ -31,6 +31,13 @@ export interface DutyOverrideRec extends RecordModel {
   by: string;
 }
 
+export interface HealthTipRec extends RecordModel {
+  household: string;
+  tip: string;
+  state: 'dismissed' | 'added' | 'done';
+  task: string;
+}
+
 export interface AbsenceRec extends RecordModel {
   household: string;
   user: string;

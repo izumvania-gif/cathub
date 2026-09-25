@@ -316,3 +316,50 @@ test('duties: a zone gives the litter to Петя, «Мои» hides it, «Воз
   await expect(litter).toBeVisible();
   await expect(page.getByText('· ты').first()).toBeVisible();
 });
+
+test('age tips: a kitten gets its vaccine course; add to chores, hide, record as done', async ({
+  page,
+}) => {
+  await onboard(page);
+  const { api } = await import('../support/api');
+  const token = await page.evaluate(
+    () => JSON.parse(localStorage.getItem('pocketbase_auth')!).token as string,
+  );
+  const cats = await api<{ items: Array<{ id: string }> }>(
+    'GET',
+    '/api/collections/cats/records',
+    undefined,
+    token,
+  );
+  // Born 57 days ago: the first vaccination is due now.
+  const born = new Date(Date.now() - 57 * 86_400_000).toISOString().slice(0, 10);
+  await api(
+    'PATCH',
+    `/api/collections/cats/records/${cats.items[0]!.id}`,
+    { birth_date: `${born} 12:00:00.000Z` },
+    token,
+  );
+
+  await page.getByRole('link', { name: 'Здоровье' }).click();
+  await expect(page.getByRole('heading', { name: 'Сейчас по возрасту' })).toBeVisible();
+  const card = (title: string) => page.getByRole('listitem').filter({ hasText: title });
+  await expect(card('Первая комплексная прививка')).toBeVisible();
+  await expect(card('Первая комплексная прививка')).toContainText('уточните у ветеринара');
+
+  await card('Глистогонка перед прививкой').getByRole('button', { name: 'В дела' }).click();
+  await expect(page.getByText(/В делах на .*Дату можно поменять/)).toBeVisible();
+  await expect(card('Глистогонка перед прививкой')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Скрыть: Взвешивать каждые 2 недели' }).click();
+  await expect(card('Взвешивать каждые 2 недели')).toHaveCount(0);
+
+  await card('Первая комплексная прививка').getByRole('button', { name: 'Уже сделано' }).click();
+  await expect(page.getByLabel('Название')).toHaveValue('Комплексная прививка');
+  await page.getByRole('button', { name: 'Сохранить запись' }).click();
+  await expect(card('Первая комплексная прививка')).toHaveCount(0);
+  // The course moves on from the real date.
+  await expect(card('Ревакцинация комплексной')).toBeVisible();
+
+  await page.getByRole('link', { name: 'Дела' }).click();
+  await expect(page.getByRole('link', { name: /Глистогонка перед прививкой/ })).toBeVisible();
+});

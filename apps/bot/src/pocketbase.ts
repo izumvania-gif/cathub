@@ -6,6 +6,7 @@ import type {
   CatRec,
   CompletionRec,
   HouseholdRec,
+  HealthRec,
   HouseholdState,
   OverrideRec,
   ReminderLogRec,
@@ -90,6 +91,8 @@ export class PocketBaseClient {
       balances,
       overrides,
       absences,
+      health,
+      tips,
     ] = await Promise.all([
       this.pb.collection('households').getFullList<HouseholdRec>(),
       this.pb.collection('users').getFullList<UserRec>({ filter: 'household != ""' }),
@@ -109,6 +112,12 @@ export class PocketBaseClient {
       this.pb
         .collection('absences')
         .getFullList<AbsenceRec>({ filter: this.pb.filter('to >= {:d}', { d: yesterday }) }),
+      this.pb
+        .collection('health_records')
+        .getFullList<HealthRec>({ fields: 'household,type,date,title' }),
+      this.pb
+        .collection('health_tips')
+        .getFullList<{ household: string; tip: string }>({ fields: 'household,tip' }),
     ]);
     const withRecent = new Set(recent.map((c) => c.task));
     const older = await Promise.all(
@@ -133,6 +142,10 @@ export class PocketBaseClient {
         .filter((o) => o.household === household.id)
         .map((o) => ({ ...o, occurrence_at: toIso(o.occurrence_at) })),
       absences: absences.filter((a) => a.household === household.id),
+      health: health
+        .filter((h) => h.household === household.id)
+        .map((h) => ({ ...h, date: toIso(h.date) })),
+      handledTips: tips.filter((t) => t.household === household.id).map((t) => t.tip),
       fish: (() => {
         const b = balances.find((x) => x.id === household.id);
         return b ? b.from_tasks + b.from_bonuses - b.spent : undefined;

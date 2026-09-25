@@ -2,6 +2,8 @@ import {
   describeDue,
   describeSchedule,
   describeSupply,
+  healthEventsFromTasks,
+  healthPlan,
   supplyForecast,
   evaluate,
   urgencyCompare,
@@ -128,6 +130,42 @@ export function whenText(at: Date, now: Date, tz: string): string {
   return `${date} в ${time}`;
 }
 
+/**
+ * An age-based tip that became due this week (core's healthPlan), not yet handled — one line in
+ * the digest, so it's a nudge rather than a daily nag.
+ */
+export function freshHealthTip(state: HouseholdState, now: Date) {
+  const cat = state.cat;
+  if (!cat?.birth_date || !state.health) return null;
+  const history = [
+    ...state.health,
+    ...healthEventsFromTasks(
+      state.tasks.map((t) => ({
+        template_key: t.template_key,
+        title: t.title,
+        completions: state.completions
+          .filter((c) => c.task === t.id)
+          .map((c) => ({ doneAt: c.done_at, kind: c.kind })),
+      })),
+    ),
+  ];
+  const handled = new Set(state.handledTips ?? []);
+  const week = 7 * 86_400_000;
+  return (
+    healthPlan({
+      birthDate: cat.birth_date.replace(' ', 'T'),
+      neutered: cat.neutered,
+      history,
+      now,
+    }).find(
+      (t) =>
+        !handled.has(t.key) &&
+        (t.status === 'now' || t.status === 'overdue') &&
+        now.getTime() - t.due.getTime() < week,
+    ) ?? null
+  );
+}
+
 /** "Today" overview used by /today and the morning digest. */
 export function summaryText(
   state: HouseholdState,
@@ -187,6 +225,8 @@ export function summaryText(
   }
   if (done.length)
     parts.push(`<i>Уже сделано: ${done.map((i) => escapeHtml(i.task.title)).join(', ')}</i>`);
+  const tip = freshHealthTip(state, now);
+  if (tip) parts.push(`🩺 По возрасту: ${escapeHtml(tip.title)}. <i>Уточните у ветеринара.</i>`);
   if (state.fish !== undefined) parts.push(`🐟 В копилке: ${state.fish}`);
   if (appUrl) parts.push(`Приложение: ${appUrl}`);
   return { text: parts.join('\n\n'), pending: pending.length + low.length };

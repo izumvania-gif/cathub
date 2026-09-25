@@ -1,10 +1,11 @@
-import { describeDue, describeSchedule } from '@cathub/core';
+import { describeDue, describeSchedule, type HealthTip } from '@cathub/core';
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { FileText, Paperclip, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Link } from 'wouter';
+import { HealthTips } from '../components/HealthTips';
 import { Sheet } from '../components/Sheet';
 import { Button, Empty, Field, Input, PageHeader } from '../components/ui';
 import { WeightChart } from '../components/WeightChart';
@@ -14,6 +15,7 @@ import { useBoard, useTz } from '../lib/board';
 import { errorMessage, pb, toPbDate } from '../lib/pb';
 import { keys, useCat, useHealthRecords, useMeasurements } from '../lib/queries';
 import { HEALTH_TYPES, TYPE_CATEGORIES } from '../lib/health';
+import { useTipActions } from '../lib/healthTips';
 import type { HealthRecord, HealthType, Task } from '../lib/types';
 
 const dateFmt = (tz: string) =>
@@ -170,15 +172,21 @@ function WeightCard() {
   );
 }
 
-function RecordForm({ onDone }: { onDone: () => void }) {
+function RecordForm({
+  onDone,
+  initial,
+}: {
+  onDone: (saved: boolean) => void;
+  initial?: { type: HealthType; title: string };
+}) {
   const user = useUser()!;
   const cat = useCat();
   const tz = useTz();
   const { items } = useBoard();
   const qc = useQueryClient();
   const actions = useTaskActions();
-  const [type, setType] = useState<HealthType>('vaccination');
-  const [title, setTitle] = useState('');
+  const [type, setType] = useState<HealthType>(initial?.type ?? 'vaccination');
+  const [title, setTitle] = useState(initial?.title ?? '');
   const [date, setDate] = useState(() =>
     new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date()),
   );
@@ -194,7 +202,9 @@ function RecordForm({ onDone }: { onDone: () => void }) {
   // Suggest the task a record of this type usually completes (e.g. a vaccination → vaccine task).
   const defaultTaskFor = (t: HealthType) =>
     items.map((i) => i.task).find((x) => TYPE_CATEGORIES[t].includes(x.category))?.id ?? '';
-  const [markTask, setMarkTask] = useState<string>(() => defaultTaskFor('vaccination'));
+  const [markTask, setMarkTask] = useState<string>(() =>
+    defaultTaskFor(initial?.type ?? 'vaccination'),
+  );
   const pickType = (t: HealthType) => {
     setType(t);
     setMarkTask(defaultTaskFor(t));
@@ -224,7 +234,7 @@ function RecordForm({ onDone }: { onDone: () => void }) {
       if (task) await actions.complete(task, { at, note: title.trim() });
       await qc.invalidateQueries({ queryKey: keys.health });
       toast.success(task ? `Сохранено, «${task.title}» отмечено` : 'Сохранено');
-      onDone();
+      onDone(true);
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -417,7 +427,12 @@ function RecordDetail({ record, onClose }: { record: HealthRecord | null; onClos
 export function Health() {
   const records = useHealthRecords();
   const tz = useTz();
-  const [adding, setAdding] = useState(false);
+  const { now } = useBoard();
+  const tipActions = useTipActions();
+  /** false = closed; otherwise the prefill (and the tip it answers, if any). */
+  const [adding, setAdding] = useState<
+    false | { type?: HealthType; title?: string; tip?: HealthTip }
+  >(false);
   const [selected, setSelected] = useState<HealthRecord | null>(null);
 
   const byYear = useMemo(() => {
@@ -438,13 +453,14 @@ export function Health() {
         action={
           <button
             type="button"
-            onClick={() => setAdding(true)}
+            onClick={() => setAdding({})}
             className="bg-ink text-paper flex min-h-10 items-center gap-1.5 rounded-2xl px-4 text-sm font-semibold"
           >
             <Plus className="size-4" strokeWidth={3} /> Запись
           </button>
         }
       />
+      <HealthTips now={now} onRecord={(type, title, tip) => setAdding({ type, title, tip })} />
       <WeightCard />
 
       <h2 className="text-ink-soft mb-2 mt-8 px-1 text-sm font-semibold">
@@ -492,8 +508,17 @@ export function Health() {
         ))
       )}
 
-      <Sheet open={adding} onClose={() => setAdding(false)} title="Новая запись">
-        {adding ? <RecordForm onDone={() => setAdding(false)} /> : null}
+      <Sheet open={Boolean(adding)} onClose={() => setAdding(false)} title="Новая запись">
+        {adding ? (
+          <RecordForm
+            initial={adding.type ? { type: adding.type, title: adding.title ?? '' } : undefined}
+            onDone={(saved) => {
+              // A record answers the tip; mark it done too (e.g. the sterilization talk).
+              if (saved && adding.tip) void tipActions.done(adding.tip).catch(() => {});
+              setAdding(false);
+            }}
+          />
+        ) : null}
       </Sheet>
       <RecordDetail record={selected} onClose={() => setSelected(null)} />
     </main>

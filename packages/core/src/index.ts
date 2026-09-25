@@ -7,3 +7,4 @@ export * from './ics';
 export * from './supplies';
 export * from './rewards';
 export * from './duties';
+export * from './health';

@@ -97,6 +97,13 @@ pnpm-workspaces monorepo:
   the bot's routing, digest («Твои/Общие») and the week view all use it. The bot's buttons:
   `t` takes a chore in the family chat, `p` asks whom to pass it to, `g` gives it; hand-overs made
   in the app are announced by `notifyHandOvers`. People who are away get no reminders or digest.
+- Age tips (docs/PLAN.md §6.8): core's `healthPlan` turns the birth date, `neutered`, «Здоровье»
+  records and done vaccine/deworming/check-up chores (`healthEventsFromTasks`) into dated tips
+  (kitten vaccine course from the real dates, deworming before the nearest vaccination, rabies,
+  teeth, sterilization, adult food, bloodwork after 7, check-ups every 6 months after 10). Every
+  tip says «уточните у ветеринара». `health_tips` stores what the family did with a tip (hid,
+  added to chores, done); the Health page shows «Сейчас по возрасту», the bot's digest one fresh
+  tip (`freshHealthTip`).
 - Fish 🐟 (docs/PLAN.md §6.7): core's `rewardFor` prices a completion from the task's status at
   that moment (weight × 5, ×1.5 on time, 0 for a repeat or a skip). The bot's tick
   (`ReminderService.rewardPending`) stores it in `completions.fish` + `rewarded`; clients can't set
