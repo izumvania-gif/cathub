@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Link } from 'wouter';
 import { Avatar, Button, Field, Input, PageHeader, Toggle } from '../components/ui';
 import { logout, refreshAuth, useUser } from '../lib/auth';
+import { exportJournalCsv, exportJson } from '../lib/export';
 import { inviteLink } from '../lib/invite';
 import { errorMessage, pb, toIso, toPbDate } from '../lib/pb';
 import { keys, useCat, useHousehold, useMembers } from '../lib/queries';
@@ -404,6 +405,40 @@ function CalendarCard() {
   );
 }
 
+function ExportCard() {
+  const household = useHousehold();
+  const tz = household.data?.timezone ?? 'Europe/Moscow';
+  const [busy, setBusy] = useState<'' | 'json' | 'csv'>('');
+  const run = async (kind: 'json' | 'csv') => {
+    setBusy(kind);
+    try {
+      if (kind === 'json') await exportJson(household.data!);
+      else await exportJournalCsv(tz);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy('');
+    }
+  };
+  return (
+    <div className="bg-card rounded-3xl p-4">
+      <p className="font-medium">Ваши данные</p>
+      <p className="text-ink-soft mt-1 text-sm">
+        Сервер делает резервную копию каждую ночь. Здесь можно скачать всё себе: дела, отметки,
+        записи о здоровье.
+      </p>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <Button variant="secondary" busy={busy === 'json'} onClick={() => run('json')}>
+          Всё (JSON)
+        </Button>
+        <Button variant="secondary" busy={busy === 'csv'} onClick={() => run('csv')}>
+          Журнал (CSV)
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function Household() {
   const user = useUser();
   const household = useHousehold();
@@ -482,6 +517,7 @@ export function Household() {
         <TelegramCard />
         <GroupChatCard />
         <CalendarCard />
+        {household.data ? <ExportCard /> : null}
         <Button variant="danger" onClick={logout}>
           Выйти ({user?.email})
         </Button>
