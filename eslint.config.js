@@ -5,11 +5,26 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/dev-dist/**', 'pocketbase/**', '.pocketbase/**'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/dev-dist/**',
+      'pocketbase/**',
+      '.pocketbase/**',
+      '**/test-results/**',
+      '**/playwright-report/**',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['apps/bot/**/*.{ts,js,mjs}', 'packages/**/*.ts', 'scripts/**/*.{js,mjs}', '*.js'],
+    files: [
+      'apps/bot/**/*.{ts,js,mjs}',
+      'packages/**/*.ts',
+      'tests/**/*.{ts,mjs}',
+      'scripts/**/*.{js,mjs}',
+      '*.js',
+    ],
     languageOptions: { globals: globals.node },
   },
   {

@@ -62,7 +62,7 @@ export class ReminderService {
     });
     if (task.assignee) return personal.filter((u) => u.id === task.assignee).map(toUser);
     const group = state.household.telegram_group_chat_id;
-    if (group) return [{ chatId: group, quiet: DEFAULT_QUIET_HOURS, label: 'семейный чат' }];
+    if (group) return [{ chatId: group, quiet: config.groupQuietHours, label: 'семейный чат' }];
     return personal.map(toUser);
   }
 

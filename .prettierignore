@@ -4,3 +4,5 @@ dev-dist
 .pocketbase
 pocketbase/pb_data
 docs
+test-results
+playwright-report

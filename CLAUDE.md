@@ -8,10 +8,10 @@ CatHub is a mobile-first PWA for a household (several people, one cat) to track 
 feeding, litter, grooming, parasite treatments, vaccinations, vet visits. Reminders go through a
 Telegram bot. The owner and users are in Russia. The UI language is Russian.
 
-**Current state: Phases 1–2 mostly done.** Working: the schedule engine in `packages/core`, the
+**Current state: Phases 1–2 done.** Working: the schedule engine in `packages/core`, the
 PocketBase schema and household/Telegram routes, the web app (login, onboarding, Today, journal,
 task list and editor, household settings, `/diag`), and the bot (linking via `/start <token>`,
-reminders with done/snooze/skip buttons, `/today`). The source of truth for scope, data model, and phases is
+reminders with done/snooze/skip buttons, `/today`, morning digest, family group chat). The source of truth for scope, data model, and phases is
 `docs/PLAN.md`. `docs/REFERENCES.md` holds competitors, OSS, and vet-care frequency sources.
 `docs/HOSTING_RU.md` holds the Russia-specific hosting analysis. `docs/DEPLOY_AMVERA.md` is the
 chosen deployment (Amvera, Moscow region). `docs/DEPLOY_YC.md` is a rejected Yandex Cloud option,
@@ -32,12 +32,21 @@ pnpm test          # Vitest in every package
 pnpm build         # web → apps/web/dist, bot → apps/bot/dist/index.js (esbuild bundle)
 pnpm --filter @cathub/core exec vitest run src/schedule.test.ts   # single test file
 pnpm --filter @cathub/core exec vitest run -t "parseTimeOfDay"     # single test by name
+pnpm e2e           # end-to-end: real PocketBase + built web app + bot against a Telegram mock (run `pnpm build` first)
+pnpm e2e -- --project=bot -g "digest"   # one e2e project / test by name
 pnpm --filter @cathub/web icons  # regenerate PWA PNG icons from apps/web/public/icon.svg
 docker build -t cathub .         # production image (same as Amvera builds)
 ```
 
-CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck, test, build and a Docker build.
-Amvera builds and deploys `main` itself.
+CI (`.github/workflows/ci.yml`) runs lint, format check, typecheck, unit tests, build, the e2e
+suite and a Docker build. Amvera builds and deploys `main` itself.
+
+E2E (`tests/e2e`, Playwright): `support/global-setup.ts` starts PocketBase on :18090 with a temp
+data dir (binary from `$PB_BIN` or downloaded via `scripts/pocketbase.sh`), the Telegram Bot API
+mock (`support/mock-telegram.mjs`, :18091; tests read calls via `/__calls` and push updates via
+`/__inject`), and the built bot with 1 s intervals and `GROUP_QUIET_HOURS=00:00-00:00`. Tests share
+one server, so every test creates its own users/household and uses unique chat ids. Bot tests set
+the user's quiet hours explicitly so they don't depend on the time of day.
 
 PocketBase schema changes go in `pocketbase/pb_migrations/*.js` (JS migrations, applied
 automatically on `serve`). Bump `pocketbase/VERSION` deliberately: PocketBase is pre-1.0.
@@ -62,7 +71,10 @@ pnpm-workspaces monorepo:
   (task, occurrence, stage, chat) once. `reminder_log` has a unique index on that tuple and stores
   the message text. The same tick edits open reminders whose occurrence was handled (in the app or
   another chat) to "✅ Петя, 20:03" — polling, not realtime, since Node has no EventSource.
-  Callback data is `<d|s|z>:<taskId>:<occurrence seconds>`. Linking: the web app calls
+  Callback data is `<d|s|z>:<taskId>:<occurrence seconds>`. Routing: a task with an assignee goes
+  to that user's private chat; otherwise to the household group chat if linked
+  (`households.telegram_group_chat_id`, via `t.me/<bot>?startgroup=<token>`), else to every linked
+  member. The morning digest (`users.digest_time`, core's `digestDue`) goes to private chats only. Linking: the web app calls
   `POST /api/cathub/telegram/link` (bot username from `TELEGRAM_BOT_USERNAME` or else the latest
   `diagnostics.bot_username` heartbeat), and the bot consumes the
   token from `telegram_links`.

@@ -1,0 +1,107 @@
+import { expect, test, type Page } from '@playwright/test';
+
+// The main user journeys in a phone-sized browser against the built PWA.
+
+const uid = () => Math.random().toString(36).slice(2, 8);
+
+async function signUp(page: Page, name: string) {
+  await page.getByRole('button', { name: 'Регистрация' }).click();
+  await page.getByLabel('Как вас зовут').fill(name);
+  await page
+    .getByLabel('Почта')
+    .fill(`${uid()}-${name === 'Маша' ? 'masha' : 'petya'}@example.com`);
+  await page.getByLabel('Пароль').fill('password123');
+  await page.getByRole('button', { name: 'Создать аккаунт' }).click();
+}
+
+async function onboard(page: Page) {
+  await page.goto('/');
+  await signUp(page, 'Маша');
+  await expect(page.getByText('Начнём')).toBeVisible();
+  await page.getByLabel('Как зовут кота').fill('Барсик');
+  await page.getByRole('button', { name: 'Дальше' }).click();
+  await expect(page.getByText('Что отслеживать')).toBeVisible();
+  await page
+    .getByLabel('Полностью сменить наполнитель: когда было в последний раз')
+    .fill('2026-01-01');
+  await page.getByRole('button', { name: 'Готово, создать дом' }).click();
+  await expect(page.getByText('Позовите семью')).toBeVisible();
+  const code = (await page.locator('p.font-display').first().innerText()).trim();
+  await page.getByRole('button', { name: 'Перейти к делам' }).click();
+  await expect(page.getByRole('navigation')).toBeVisible();
+  return code;
+}
+
+test('onboarding creates a household with template tasks', async ({ page }) => {
+  await onboard(page);
+  await expect(page.getByLabel('Миска: Барсик')).toBeVisible();
+  await page.getByRole('link', { name: 'Дела' }).click();
+  for (const title of ['Покормить', 'Убрать лоток', 'Прививка от бешенства']) {
+    await expect(page.getByRole('link', { name: new RegExp(title) })).toBeVisible();
+  }
+});
+
+test('feeding fills the bowl for everyone in real time', async ({ page, browser }) => {
+  const code = await onboard(page);
+
+  const petyaCtx = await browser.newContext({
+    baseURL: page.url(),
+    locale: 'ru-RU',
+    timezoneId: 'Europe/Moscow',
+  });
+  const petya = await petyaCtx.newPage();
+  await petya.goto(`/join/${code}`);
+  await signUp(petya, 'Петя');
+  await expect(petya.getByLabel('Код приглашения')).toHaveValue(code);
+  await petya.getByRole('button', { name: 'Присоединиться' }).click();
+  await expect(petya.getByRole('navigation')).toBeVisible();
+
+  await petya.getByRole('button', { name: 'Покормил(а)' }).click();
+  await expect(petya.getByText('Отмечено: Покормить')).toBeVisible();
+  await expect(petya.getByText('Барсик сыт')).toBeVisible();
+
+  // Маша's screen updates without a reload (PocketBase realtime).
+  await expect(page.getByText('Барсик сыт')).toBeVisible();
+  await expect(page.getByText(/Петя покормил\(а\)/)).toBeVisible();
+
+  // The journal shows who did it.
+  await page.getByRole('link', { name: 'Журнал' }).click();
+  await expect(page.getByRole('button', { name: /Покормить/ })).toBeVisible();
+  await petyaCtx.close();
+});
+
+test('mark done with undo, and backdate from the actions sheet', async ({ page }) => {
+  await onboard(page);
+  const litter = page.getByRole('button', { name: 'Полностью сменить наполнитель: отметить' });
+  await litter.click();
+  await expect(page.getByText('Отмечено: Полностью сменить наполнитель')).toBeVisible();
+  await page.getByRole('button', { name: 'Отменить' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Полностью сменить наполнитель: отметить' }),
+  ).toBeVisible();
+
+  await page.getByRole('button', { name: 'Полностью сменить наполнитель: действия' }).click();
+  await page.getByRole('button', { name: 'Сделано раньше…' }).click();
+  await page.getByLabel('Когда сделано').fill('2026-01-02T10:00');
+  await page.getByRole('button', { name: 'Сохранить' }).click();
+  await expect(page.getByText('Отмечено: Полностью сменить наполнитель')).toBeVisible();
+});
+
+test('create a custom task in the editor', async ({ page }) => {
+  await onboard(page);
+  await page.getByRole('link', { name: 'Дела' }).click();
+  await page.getByRole('link', { name: 'Новое' }).click();
+  await page.getByLabel('Название').fill('Дать витамины');
+  await page.getByLabel('Каждые').fill('2');
+  await expect(page.getByText('Итого: каждые 2 недели')).toBeVisible();
+  await page.getByRole('button', { name: 'Добавить дело' }).click();
+  await expect(page.getByRole('link', { name: /Дать витамины/ })).toBeVisible();
+});
+
+test('household page: invite code and Telegram settings', async ({ page }) => {
+  const code = await onboard(page);
+  await page.getByRole('link', { name: 'Дом' }).click();
+  await expect(page.getByText(code)).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Подключить Telegram' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Выбрать чат в Telegram' })).toBeVisible();
+});

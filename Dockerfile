@@ -8,6 +8,7 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/web/package.json apps/web/
 COPY apps/bot/package.json apps/bot/
 COPY packages/core/package.json packages/core/
+COPY tests/e2e/package.json tests/e2e/
 RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm --filter @cathub/web --filter @cathub/bot build
