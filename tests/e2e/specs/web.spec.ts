@@ -198,3 +198,48 @@ test('offline: marks are queued, the app reopens without network, and they sync 
   await page.getByRole('link', { name: 'Журнал' }).click();
   await expect(page.getByRole('button', { name: /Полностью сменить наполнитель/ })).toBeVisible();
 });
+
+test('Mini App: opening the app from Telegram signs in automatically', async ({
+  page,
+  browser,
+}) => {
+  await onboard(page);
+  // Link Telegram for this user through the API (the bot consumes the token via the mock).
+  const { api, linkTelegram, newChatId, signedInitData } = await import('../support/api');
+  const token = await page.evaluate(
+    () => JSON.parse(localStorage.getItem('pocketbase_auth')!).token as string,
+  );
+  const record = await page.evaluate(
+    () =>
+      JSON.parse(localStorage.getItem('pocketbase_auth')!).record as {
+        id: string;
+        email: string;
+        name: string;
+      },
+  );
+  const chat = newChatId();
+  await linkTelegram({ id: record.id, token, email: record.email, name: record.name }, chat);
+  await expect
+    .poll(
+      async () =>
+        (
+          await api<{ telegram_chat_id: string }>(
+            'GET',
+            `/api/collections/users/records/${record.id}`,
+            undefined,
+            token,
+          )
+        ).telegram_chat_id,
+    )
+    .toBe(String(chat));
+
+  const tg = await browser.newContext({
+    baseURL: page.url(),
+    locale: 'ru-RU',
+    timezoneId: 'Europe/Moscow',
+  });
+  const mini = await tg.newPage();
+  await mini.goto(`/#tgWebAppData=${encodeURIComponent(signedInitData(chat))}&tgWebAppVersion=8.0`);
+  await expect(mini.getByLabel('Миска: Барсик')).toBeVisible();
+  await tg.close();
+});

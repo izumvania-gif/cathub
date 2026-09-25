@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { APP_URL, SUPERUSER, TG_URL, TZ } from './env';
 
 export class ApiError extends Error {
@@ -208,4 +209,20 @@ export async function linkTelegram(user: TestUser, chatId: number) {
   );
   const token = new URL(url).searchParams.get('start')!;
   await tgInject(tgMessage(chatId, chatId, `/start ${token}`));
+}
+
+/** Telegram Mini App initData signed with the e2e bot token (see support/global-setup.ts). */
+export function signedInitData(telegramUserId: number, botToken = '42:e2e-token'): string {
+  const fields: Record<string, string> = {
+    auth_date: String(Math.floor(Date.now() / 1000)),
+    query_id: 'e2e',
+    user: JSON.stringify({ id: telegramUserId, first_name: 'Тест' }),
+  };
+  const check = Object.keys(fields)
+    .sort()
+    .map((k) => `${k}=${fields[k]}`)
+    .join('\n');
+  const secret = createHmac('sha256', 'WebAppData').update(botToken).digest();
+  const hash = createHmac('sha256', secret).update(check).digest('hex');
+  return new URLSearchParams({ ...fields, hash }).toString();
 }

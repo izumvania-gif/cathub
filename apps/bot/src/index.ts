@@ -18,12 +18,25 @@ function statusText() {
   return `pong 🏓\nверсия: ${config.version}\nаптайм: ${uptimeS()} с\nпоследняя проверка Telegram: ${probe}`;
 }
 
+/** Chat menu button that opens the app as a Telegram Mini App (needs an https APP_URL). */
+async function setupMenuButton(bot: Bot) {
+  if (!config.appUrl?.startsWith('https://')) return;
+  try {
+    await bot.api.setChatMenuButton({
+      menu_button: { type: 'web_app', text: 'CatHub', web_app: { url: config.appUrl } },
+    });
+  } catch (err) {
+    log.warn('could not set the menu button', err);
+  }
+}
+
 /** Long polling that survives network failures and 409s during container restarts. */
 async function runPolling(bot: Bot) {
   for (let attempt = 0; !stopping; attempt++) {
     try {
       const me = await bot.api.getMe();
       log.info(`polling as @${me.username}`);
+      await setupMenuButton(bot);
       attempt = 0;
       await bot.start({ drop_pending_updates: false });
     } catch (err) {

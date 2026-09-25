@@ -8,6 +8,8 @@ import {
   linkTelegram,
   mskTime,
   newChatId,
+  signedInitData,
+  statusOf,
   tgCallback,
   uid,
   tgCalls,
@@ -301,4 +303,36 @@ test('family group chat gets shared reminders; assigned ones go to the assignee'
     owner.token,
   );
   expect(h.telegram_group_chat_id).toBe('');
+});
+
+test('Mini App: signed initData logs in the linked user', async () => {
+  const { owner, chat } = await linkedOwner();
+  const auth = await api<{ token: string; record: { id: string } }>(
+    'POST',
+    '/api/cathub/telegram/webapp-auth',
+    {
+      initData: signedInitData(chat),
+    },
+  );
+  expect(auth.record.id).toBe(owner.id);
+  expect(auth.token).toBeTruthy();
+
+  expect(
+    await statusOf(
+      api('POST', '/api/cathub/telegram/webapp-auth', {
+        initData: signedInitData(chat, '42:wrong'),
+      }),
+    ),
+  ).toBe(401);
+  expect(
+    await statusOf(
+      api('POST', '/api/cathub/telegram/webapp-auth', { initData: signedInitData(newChatId()) }),
+    ),
+  ).toBe(404);
+});
+
+test('the bot sets the Mini App menu button', async () => {
+  const calls = await tgCalls();
+  const menu = calls.find((c) => c.method === 'setChatMenuButton');
+  expect(JSON.stringify(menu?.params)).toContain('web_app');
 });

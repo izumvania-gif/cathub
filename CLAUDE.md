@@ -8,11 +8,12 @@ CatHub is a mobile-first PWA for a household (several people, one cat) to track 
 feeding, litter, grooming, parasite treatments, vaccinations, vet visits. Reminders go through a
 Telegram bot. The owner and users are in Russia. The UI language is Russian.
 
-**Current state: Phases 1–3 done.** Working: the schedule engine in `packages/core`, the
+**Current state: Phases 1–4 done** (phase 5, polish, is next). Working: the schedule engine in `packages/core`, the
 PocketBase schema and household/Telegram routes, the web app (login, onboarding, Today, journal,
 task list and editor, household settings, `/diag`), and the bot (linking via `/start <token>`,
 reminders with done/snooze/skip buttons, `/today`, morning digest, family group chat), and health
-(weight chart, health records with protected files, calendar subscription feed). The source of truth for scope, data model, and phases is
+(weight chart, health records with protected files, calendar subscription feed), supplies with a
+usage forecast, 30-day stats, rotating chores, offline mode, a Telegram Mini App and nightly backups. The source of truth for scope, data model, and phases is
 `docs/PLAN.md`. `docs/REFERENCES.md` holds competitors, OSS, and vet-care frequency sources.
 `docs/HOSTING_RU.md` holds the Russia-specific hosting analysis. `docs/DEPLOY_AMVERA.md` is the
 chosen deployment (Amvera, Moscow region). `docs/DEPLOY_YC.md` is a rejected Yandex Cloud option,
@@ -83,6 +84,14 @@ pnpm-workspaces monorepo:
   `households.calendar_token`, then proxies to the bot's internal HTTP server
   (`apps/bot/src/calendar.ts`, 127.0.0.1:`ICS_PORT`=8091, PocketBase side `BOT_INTERNAL_URL`),
   which builds the .ics with core's `calendarEvents`/`buildIcs`. Hooks never compute due dates.
+- Mini App login: the bot sets a `web_app` menu button (needs an https `APP_URL`). The web app reads
+  `#tgWebAppData` on load (`lib/telegram.ts`, no telegram.org SDK) and calls
+  `POST /api/cathub/telegram/webapp-auth`, which asks the bot's internal `/webapp-verify` to check
+  the HMAC (the bot holds `BOT_TOKEN`) and returns a PocketBase auth for the user with that
+  `telegram_chat_id`.
+- Other hooks: `rotation.pb.js` (after a completion the assignee moves to the next person in
+  `tasks.rotation`; undone on delete), `backups.pb.js` (backup cron/S3 from `BACKUP_*` env on start),
+  `users.pb.js` (default digest time).
 - `pocketbase/`: PocketBase backend (auth, SQLite, realtime, files). Schema lives in
   `pb_migrations` and access control in API rules. Every record is scoped to the user's `household`.
   Users can't set `household`/`role` through the API; membership changes go through the custom
@@ -96,7 +105,11 @@ Web app notes (`apps/web/src`): routing is `wouter` (`App.tsx`), data is TanStac
 object on every access, so `lib/auth.ts` keeps a cached snapshot for `useSyncExternalStore`.
 PocketBase dates use a space (`2026-09-25 08:12:00.000Z`); convert with `toIso`/`toPbDate` from
 `lib/pb.ts`. Access rules read `@request.auth.household` from the database, so the client only
-needs `refreshAuth()` to update its own view of the user.
+needs `refreshAuth()` to update its own view of the user. Offline: the query cache is persisted to
+localStorage (`cathub.cache`) and completions made without network go to `lib/outbox.ts`
+(`cathub.outbox`), are merged into `useBoard` immediately, and flushed by `OfflineBanner`. When
+computing "now" for the engine, never use a value older than the newest data (fetched or queued):
+the engine ignores completions in the future, which makes fresh marks invisible.
 
 Deployment (docs/DEPLOY_AMVERA.md): **one Amvera project, one container.** The root `Dockerfile`
 builds web + bot, and `deploy/entrypoint.sh` runs `pocketbase serve --http=0.0.0.0:8090

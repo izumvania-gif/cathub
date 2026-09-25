@@ -87,7 +87,7 @@ export default async function globalSetup() {
         HEARTBEAT_INTERVAL_MS: '2000',
         GROUP_QUIET_HOURS: '00:00-00:00',
         ICS_PORT: String(ICS_PORT),
-        APP_URL,
+        APP_URL: 'https://cathub.example',
       },
     }),
   );

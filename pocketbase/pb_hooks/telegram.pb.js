@@ -60,3 +60,38 @@ routerAdd(
   },
   $apis.requireAuth('users'),
 );
+
+// POST /api/cathub/telegram/webapp-auth {initData} → auth response for the user whose Telegram
+// is linked. The signature is checked by the bot (it has BOT_TOKEN), reached on its internal port.
+routerAdd('POST', '/api/cathub/telegram/webapp-auth', (e) => {
+  const initData = String((e.requestInfo().body || {}).initData || '');
+  if (!initData || initData.length > 4096) throw new BadRequestError('Нет данных Telegram.');
+  const base = String($os.getenv('BOT_INTERNAL_URL') || 'http://127.0.0.1:8091').replace(
+    /\/+$/,
+    '',
+  );
+  let res;
+  try {
+    res = $http.send({
+      url: `${base}/webapp-verify`,
+      method: 'POST',
+      body: JSON.stringify({ initData }),
+      headers: { 'content-type': 'application/json' },
+      timeout: 10,
+    });
+  } catch (_) {
+    throw new ApiError(503, 'Бот недоступен, войдите по почте и паролю.');
+  }
+  if (res.statusCode !== 200 || !res.json || !res.json.userId) {
+    throw new UnauthorizedError('Не удалось проверить данные Telegram.');
+  }
+  let user;
+  try {
+    user = $app.findFirstRecordByData('users', 'telegram_chat_id', String(res.json.userId));
+  } catch (_) {
+    throw new NotFoundError(
+      'Этот Telegram не привязан. Войдите по почте и паролю и нажмите «Подключить Telegram» на вкладке «Дом».',
+    );
+  }
+  return $apis.recordAuthResponse(e, user, 'telegram', null);
+});

@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
+import { isTelegramMiniApp, loginWithTelegram } from '../lib/telegram';
 import { Button, Field, Input, Segmented } from '../components/ui';
 import { errorMessage, pb } from '../lib/pb';
 
@@ -9,6 +10,20 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const inTelegram = isTelegramMiniApp();
+  const [tgError, setTgError] = useState('');
+
+  // Inside the Telegram Mini App, try to sign in with Telegram right away.
+  useEffect(() => {
+    if (!inTelegram) return;
+    let cancelled = false;
+    loginWithTelegram().then((err) => {
+      if (!cancelled && err) setTgError(err);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [inTelegram]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -44,6 +59,11 @@ export function Login() {
         прививка.
       </p>
 
+      {inTelegram ? (
+        <p className="bg-tint mt-6 rounded-2xl p-3 text-sm">
+          {tgError || 'Входим через Telegram…'}
+        </p>
+      ) : null}
       <form onSubmit={submit} className="mt-8 grid gap-4">
         <Segmented
           value={mode}
