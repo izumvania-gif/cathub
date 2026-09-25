@@ -10,3 +10,6 @@ pb_data/
 .DS_Store
 test-results/
 playwright-report/
+
+# /brag launch video output
+brag-output/
