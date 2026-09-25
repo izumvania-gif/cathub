@@ -10,6 +10,9 @@ import { inviteLink } from '../lib/invite';
 import { errorMessage, pb, toIso, toPbDate } from '../lib/pb';
 import { keys, useCat, useHousehold, useMembers } from '../lib/queries';
 import type { Cat } from '../lib/types';
+import { CatSprite } from '../cat/CatScene';
+import { normalizeLook } from '../cat/look';
+import { LookEditor } from '../cat/LookEditor';
 
 const TIMEZONES = [
   ['Europe/Kaliningrad', 'Калининград (UTC+2)'],
@@ -84,6 +87,7 @@ function CatForm({ cat }: { cat: Cat }) {
     chip_number: cat.chip_number,
     vet_clinic: cat.vet_clinic,
   });
+  const [look, setLook] = useState(() => normalizeLook(cat.appearance));
   const [busy, setBusy] = useState(false);
 
   const save = async () => {
@@ -97,6 +101,7 @@ function CatForm({ cat }: { cat: Cat }) {
         neutered: form.neutered,
         chip_number: form.chip_number.trim(),
         vet_clinic: form.vet_clinic.trim(),
+        appearance: look,
       });
       await qc.invalidateQueries({ queryKey: keys.cat });
       toast.success('Сохранено');
@@ -136,6 +141,19 @@ function CatForm({ cat }: { cat: Cat }) {
           onChange={(v) => setForm({ ...form, neutered: v })}
         />
       </div>
+      <section aria-label="Внешность кота" className="bg-card rounded-3xl p-4">
+        <h3 className="font-medium">Внешность</h3>
+        <p className="text-ink-soft mb-3 text-sm">Пиксельный кот на главном экране</p>
+        <div className="mb-3 flex justify-center">
+          <CatSprite
+            look={look}
+            anim="sit"
+            scale={3}
+            label={`${form.name || 'Кот'}: как выглядит`}
+          />
+        </div>
+        <LookEditor look={look} onChange={setLook} collapsible />
+      </section>
       <Field label="Номер чипа">
         <Input
           value={form.chip_number}

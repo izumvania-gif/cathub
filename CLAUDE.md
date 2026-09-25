@@ -104,8 +104,10 @@ pnpm-workspaces monorepo:
 Pixel cat (`apps/web/src/cat`): `sprite.ts` rasterizes parametric poses (ellipses, capsule legs,
 Bézier tail) with auto-outline; coat patterns are computed per pixel from `look.ts` (stored in
 `cats.appearance`). `behavior.ts` is a pure mood → behaviour state machine; `CatScene` draws the
-room on a canvas (~12 fps, paused off screen, still pose under reduced motion). `/cat-lab` shows
-everything. `cat.test.ts` checks every frame stays inside the sprite frame.
+room on a canvas (~12 fps, paused off screen, still pose under reduced motion). `room.ts` holds the
+room items and the spots where the cat does things. On Today the mood comes from
+`lib/catMood.ts` (fed → hungry → grumpy about litter → restless → sleepy at night → happy →
+calm). `/cat-lab` shows everything. `cat.test.ts` checks every frame stays inside the sprite frame.
 
 Web app notes (`apps/web/src`): routing is `wouter` (`App.tsx`), data is TanStack Query
 (`lib/queries.ts`) invalidated by PocketBase realtime subscriptions (`useRealtimeSync`), and

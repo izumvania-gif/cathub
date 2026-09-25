@@ -35,6 +35,8 @@ export interface Cat extends RecordModel {
   chip_number: string;
   vet_clinic: string;
   notes: string;
+  /** Pixel cat look; see normalizeLook(). */
+  appearance: unknown;
 }
 
 export interface Task extends RecordModel {

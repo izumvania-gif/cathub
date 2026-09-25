@@ -2,7 +2,10 @@ import { describeWhen, type Evaluation } from '@cathub/core';
 import { AnimatePresence } from 'motion/react';
 import { useState } from 'react';
 import { Link } from 'wouter';
-import { Bowl } from '../components/Bowl';
+import { MOOD_LABELS } from '../cat/behavior';
+import { CatLoader } from '../cat/CatLoader';
+import { CatScene } from '../cat/CatScene';
+import { STARTER_ITEMS } from '../cat/room';
 import { InstallHint } from '../components/InstallHint';
 import { SleepyCat } from '../components/SleepyCat';
 import { DoubleCheckSheet, TaskActionsSheet } from '../components/TaskActions';
@@ -10,13 +13,56 @@ import { useCompleteFlow } from '../lib/completeFlow';
 import { TaskCard } from '../components/TaskCard';
 import { Button, Empty } from '../components/ui';
 import { useBoard, type BoardItem } from '../lib/board';
+import { bowlLevel, catMood, findFeeding, isEvening } from '../lib/catMood';
+import { useCatLook } from '../lib/catLook';
 import { useCat, useMembers } from '../lib/queries';
 import { SupplyRow, SupplySheet } from '../components/Supplies';
 import { useSupplyForecasts } from '../lib/supplies';
 
 const WEEK = 7 * 86_400_000;
 
-function FeedingHero({
+/** The cat's room with its mood, plus who fed it and when (or a button to feed it). */
+function CatHero({
+  items,
+  feeding,
+  catName,
+  now,
+  tz,
+  onFeed,
+}: {
+  items: BoardItem[];
+  feeding: BoardItem | undefined;
+  catName: string;
+  now: Date;
+  tz: string;
+  onFeed: () => void;
+}) {
+  const look = useCatLook();
+  const mood = catMood(items, now, tz);
+  return (
+    <section className="bg-card overflow-hidden rounded-[2rem] pb-5 text-center">
+      <CatScene
+        look={look}
+        mood={mood}
+        name={catName}
+        items={STARTER_ITEMS}
+        bowlLevel={bowlLevel(feeding)}
+        night={isEvening(now, tz)}
+      />
+      <div className="px-5">
+        {feeding ? (
+          <FeedingInfo item={feeding} catName={catName} now={now} tz={tz} onFeed={onFeed} />
+        ) : (
+          <p className="font-display mt-4 text-xl font-semibold">
+            {catName} {MOOD_LABELS[mood]}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function FeedingInfo({
   item,
   catName,
   now,
@@ -31,15 +77,13 @@ function FeedingHero({
 }) {
   const { ev, covered } = item;
   const fed = ev.status === 'done' && covered;
-  const level = fed ? Math.max(0.08, 1 - ev.dueness) : 0;
   const next = ev.due
     ? new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: tz }).format(
         ev.due,
       )
     : null;
   return (
-    <section className="bg-card flex flex-col items-center rounded-[2rem] px-5 pb-5 pt-6 text-center">
-      <Bowl level={level} name={catName} />
+    <>
       {fed ? (
         <>
           <p className="font-display mt-4 text-xl font-semibold">{catName} сыт</p>
@@ -69,7 +113,7 @@ function FeedingHero({
           </Button>
         </>
       )}
-    </section>
+    </>
   );
 }
 
@@ -107,15 +151,8 @@ export function Today() {
   const [openSupply, setOpenSupply] = useState<string | null>(null);
   const selectedSupply = supplies.list.find((x) => x.supply.id === openSupply) ?? null;
 
-  // The bowl shows the feeding task: the template one, else a custom daily feeding task.
-  const feeding =
-    items.find((i) => i.task.template_key === 'feeding') ??
-    items.find(
-      (i) =>
-        i.task.category === 'feeding' &&
-        i.task.schedule.kind === 'daily_slots' &&
-        /корм/i.test(i.task.title),
-    );
+  // The hero shows the feeding task: the template one, else a custom daily feeding task.
+  const feeding = findFeeding(items);
   const rest = items.filter((i) => i !== feeding);
   const is =
     (...s: Evaluation['status'][]) =>
@@ -161,7 +198,7 @@ export function Today() {
       </header>
 
       {isLoading ? (
-        <div className="bg-card h-72 animate-pulse rounded-[2rem]" />
+        <CatLoader className="pt-16" />
       ) : items.length === 0 ? (
         <Empty title="Дел пока нет">
           <Link href="/tasks/new" className="underline underline-offset-4">
@@ -170,15 +207,14 @@ export function Today() {
         </Empty>
       ) : (
         <>
-          {feeding ? (
-            <FeedingHero
-              item={feeding}
-              catName={cat.data?.name ?? 'Котик'}
-              now={now}
-              tz={tz}
-              onFeed={() => flow.request(feeding)}
-            />
-          ) : null}
+          <CatHero
+            items={items}
+            feeding={feeding}
+            catName={cat.data?.name ?? 'Котик'}
+            now={now}
+            tz={tz}
+            onFeed={() => feeding && flow.request(feeding)}
+          />
           {lowSupplies.length ? (
             <section className="mt-6">
               <h2 className="text-ink-soft mb-2 px-1 text-sm font-semibold">Заканчивается</h2>

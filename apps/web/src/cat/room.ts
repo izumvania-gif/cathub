@@ -24,7 +24,7 @@ export type ItemKey =
 export const ITEMS: Record<ItemKey, { label: string; price: number; does: string }> = {
   window: { label: 'Окно с подоконником', price: 0, does: 'сидит на подоконнике, смотрит на птиц' },
   box: { label: 'Коробка', price: 0, does: 'залезает и выглядывает' },
-  ball: { label: 'Клубок ниток', price: 30, does: 'охотится и гоняет' },
+  ball: { label: 'Клубок ниток', price: 0, does: 'охотится и гоняет' },
   rug: { label: 'Коврик', price: 40, does: 'мнёт лапками, валяется' },
   plant: { label: 'Цветок на подоконник', price: 50, does: 'нюхает' },
   picture: { label: 'Картина с рыбкой', price: 60, does: '—' },
@@ -35,6 +35,9 @@ export const ITEMS: Record<ItemKey, { label: string; price: number; does: string
   tree: { label: 'Домик-когтеточка', price: 250, does: 'прячется в домик, спит наверху' },
   aquarium: { label: 'Аквариум', price: 300, does: 'смотрит на рыбок' },
 };
+
+/** What every room starts with; the rest is bought with fish. */
+export const STARTER_ITEMS: readonly ItemKey[] = ['window', 'box', 'ball'];
 
 export type SpotKind =
   'perch' | 'bed' | 'hide' | 'box' | 'watch' | 'scratch' | 'bat' | 'rug' | 'ball' | 'sniff';

@@ -204,7 +204,10 @@ function RecordForm({ onDone }: { onDone: () => void }) {
     if (!title.trim()) return toast.error('Как назвать запись?');
     setBusy(true);
     try {
-      const at = new Date(`${date}T12:00:00`);
+      // Noon of the chosen day, but never in the future: the engine ignores completions
+      // from the future, so a record made just after midnight wouldn't count.
+      const noon = new Date(`${date}T12:00:00`);
+      const at = noon.getTime() > Date.now() ? new Date() : noon;
       await pb.collection('health_records').create({
         household: user.household,
         cat: cat.data?.id ?? '',

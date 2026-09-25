@@ -11,6 +11,8 @@ import { DEFAULT_TZ } from '../lib/board';
 import { errorMessage, pb, toPbDate } from '../lib/pb';
 import { scheduleFromTemplate } from '../lib/templates';
 import type { Household } from '../lib/types';
+import { DEFAULT_LOOK, type CatLook } from '../cat/look';
+import { LookEditor } from '../cat/LookEditor';
 
 function detectTz() {
   try {
@@ -39,6 +41,7 @@ export function Onboarding() {
   const [code, setCode] = useState(pending);
   const [catName, setCatName] = useState('');
   const [birth, setBirth] = useState('');
+  const [look, setLook] = useState<CatLook>(DEFAULT_LOOK);
   const [answers, setAnswers] = useState<OnboardingAnswers>({
     outdoor: false,
     longHair: false,
@@ -89,6 +92,7 @@ export function Onboarding() {
         ...(birth ? { birth_date: toPbDate(new Date(`${birth}T12:00:00`)) } : {}),
         outdoor: answers.outdoor,
         long_hair: answers.longHair,
+        appearance: look,
       });
       const templates = TASK_TEMPLATES.filter((t) => picked.has(t.key));
       for (const [i, t] of templates.entries()) {
@@ -168,6 +172,12 @@ export function Onboarding() {
                   placeholder="Барсик"
                 />
               </Field>
+              <section aria-label="Какой он" className="grid gap-2">
+                <span className="text-ink-soft text-sm font-medium">
+                  Какой он? Выберите похожего — его можно настроить потом
+                </span>
+                <LookEditor look={look} onChange={setLook} collapsible />
+              </section>
               <Field label="Дата рождения" hint="Можно примерно. Пожилым котам осмотр нужен чаще.">
                 <Input type="date" value={birth} onChange={(e) => setBirth(e.target.value)} />
               </Field>

@@ -3,6 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { MotionConfig } from 'motion/react';
 import { lazy, Suspense, useEffect } from 'react';
+import { CatLoader } from './cat/CatLoader';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster } from 'sonner';
 import { Redirect, Route, Switch, useLocation } from 'wouter';
@@ -28,11 +29,7 @@ const TaskEditor = lazy(() =>
   import('./pages/TaskEditor').then((m) => ({ default: m.TaskEditor })),
 );
 
-const Loading = () => (
-  <div className="mx-auto max-w-lg px-4 pt-16" aria-busy="true" aria-label="Загрузка">
-    <div className="bg-card h-40 animate-pulse rounded-[2rem]" />
-  </div>
-);
+const Loading = () => <CatLoader />;
 
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 

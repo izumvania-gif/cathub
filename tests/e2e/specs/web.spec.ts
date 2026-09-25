@@ -34,7 +34,7 @@ async function onboard(page: Page) {
 
 test('onboarding creates a household with template tasks', async ({ page }) => {
   await onboard(page);
-  await expect(page.getByLabel('Миска: Барсик')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Барсик: .*Погладить$/ })).toBeVisible();
   await page.getByRole('link', { name: 'Дела' }).click();
   for (const title of ['Покормить', 'Убрать лоток', 'Прививка от бешенства']) {
     await expect(page.getByRole('link', { name: new RegExp(title) })).toBeVisible();
@@ -59,6 +59,11 @@ test('feeding fills the bowl for everyone in real time', async ({ page, browser 
   await petya.getByRole('button', { name: 'Покормил(а)' }).click();
   await expect(petya.getByText('Отмечено: Покормить')).toBeVisible();
   await expect(petya.getByText('Барсик сыт')).toBeVisible();
+  // The pixel cat goes to eat.
+  await expect(petya.getByRole('button', { name: /^Барсик: / })).toHaveAttribute(
+    'data-mood',
+    'fed',
+  );
 
   // Маша's screen updates without a reload (PocketBase realtime).
   await expect(page.getByText('Барсик сыт')).toBeVisible();
@@ -188,7 +193,7 @@ test('offline: marks are queued, the app reopens without network, and they sync 
 
   // Reopen without network: the shell comes from the service worker, data from the saved cache.
   await page.reload();
-  await expect(page.getByLabel('Миска: Барсик')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Барсик: .*Погладить$/ })).toBeVisible();
   await expect(page.getByRole('status')).toContainText('1 отметка отправится');
 
   await context.setOffline(false);
@@ -240,6 +245,6 @@ test('Mini App: opening the app from Telegram signs in automatically', async ({
   });
   const mini = await tg.newPage();
   await mini.goto(`/#tgWebAppData=${encodeURIComponent(signedInitData(chat))}&tgWebAppVersion=8.0`);
-  await expect(mini.getByLabel('Миска: Барсик')).toBeVisible();
+  await expect(mini.getByRole('button', { name: /^Барсик: .*Погладить$/ })).toBeVisible();
   await tg.close();
 });
