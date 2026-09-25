@@ -1,4 +1,8 @@
 import {
+  ASSIGN_MODE_LABELS,
+  assignMode,
+  WEEKDAY_SHORT,
+  type AssignMode,
   FISH_PER_WEIGHT,
   ON_TIME_BONUS,
   taskWeight,
@@ -22,7 +26,7 @@ import { Button, Field, Input, Segmented, Toggle } from '../components/ui';
 import { useUser } from '../lib/auth';
 import { useTz } from '../lib/board';
 import { errorMessage, pb } from '../lib/pb';
-import { keys, useCat, useMembers, useTasks } from '../lib/queries';
+import { keys, useCat, useHousehold, useMembers, useTasks } from '../lib/queries';
 import { todayIso } from '../lib/templates';
 import type { Task } from '../lib/types';
 
@@ -61,7 +65,8 @@ interface Draft {
   trackUnit: string;
   medical: boolean;
   notes: string;
-  who: 'anyone' | 'one' | 'rotation';
+  who: AssignMode;
+  dutyMap: Record<string, string>;
   assignee: string;
   rotation: string[];
   weight: Weight;
@@ -88,7 +93,8 @@ function draftFrom(task: Task | undefined): Draft {
     trackUnit: task?.track_value?.unit ?? 'кг',
     medical: task?.medical ?? false,
     notes: task?.notes ?? '',
-    who: task?.rotation?.length ? 'rotation' : task?.assignee ? 'one' : 'anyone',
+    who: task ? assignMode(task) : 'zone',
+    dutyMap: task?.duty_map ?? {},
     assignee: task?.assignee ?? '',
     rotation: task?.rotation ?? [],
     weight: taskWeight(task ?? {}),
@@ -148,6 +154,7 @@ function Editor({ task }: { task?: Task }) {
   const user = useUser();
   const cat = useCat();
   const members = useMembers();
+  const household = useHousehold();
   const tz = useTz();
   const qc = useQueryClient();
   const [d, setD] = useState<Draft>(() => draftFrom(task));
@@ -182,6 +189,9 @@ function Editor({ task }: { task?: Task }) {
     });
   };
 
+  const zoneUser = household.data?.duty_zones?.[d.category]?.user ?? '';
+  const isMapKey = (k: string) => (d.who === 'weekday' ? /^[1-7]$/.test(k) : d.times.includes(k));
+
   const save = async () => {
     const schedule = scheduleFrom(d, tz);
     if (typeof schedule === 'string') return toast.error(schedule);
@@ -208,6 +218,11 @@ function Editor({ task }: { task?: Task }) {
                 : d.rotation[0]
               : '',
         rotation: d.who === 'rotation' ? d.rotation : [],
+        assign_mode: d.who,
+        duty_map:
+          d.who === 'weekday' || (d.who === 'slot' && d.kind === 'daily_slots')
+            ? Object.fromEntries(Object.entries(d.dutyMap).filter(([k, v]) => v && isMapKey(k)))
+            : null,
         weight: d.weight,
       };
       if (task) await pb.collection('tasks').update(task.id, body);
@@ -475,16 +490,61 @@ function Editor({ task }: { task?: Task }) {
         </div>
 
         <div>
-          <span className="text-ink-soft mb-1.5 block text-sm font-medium">Кто делает</span>
-          <Segmented
-            value={d.who}
-            onChange={(w) => set('who', w)}
-            options={[
-              { value: 'anyone', label: 'Любой' },
-              { value: 'one', label: 'Один' },
-              { value: 'rotation', label: 'По очереди' },
-            ]}
-          />
+          <label className="grid gap-1.5">
+            <span className="text-ink-soft text-sm font-medium">Кто делает</span>
+            <select
+              className="bg-card border-line min-h-12 w-full rounded-2xl border px-3"
+              value={d.who}
+              onChange={(e) => set('who', e.target.value as AssignMode)}
+            >
+              {(Object.keys(ASSIGN_MODE_LABELS) as AssignMode[])
+                .filter((m) => m !== 'slot' || d.kind === 'daily_slots' || d.who === 'slot')
+                .map((m) => (
+                  <option key={m} value={m}>
+                    {ASSIGN_MODE_LABELS[m]}
+                  </option>
+                ))}
+            </select>
+          </label>
+          {d.who === 'zone' ? (
+            <p className="text-ink-soft mt-1.5 text-sm">
+              «{CATEGORY_LABELS[d.category]}» —{' '}
+              {zoneUser
+                ? (members.data?.find((m) => m.id === zoneUser)?.name ?? 'кто-то')
+                : 'любой'}
+              .{' '}
+              <Link href="/duties" className="underline underline-offset-4">
+                Зоны ответственности
+              </Link>
+            </p>
+          ) : null}
+          {d.who === 'weekday' || d.who === 'slot' ? (
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {(d.who === 'weekday'
+                ? ([1, 2, 3, 4, 5, 6, 7] as const).map(
+                    (w) => [String(w), WEEKDAY_SHORT[w]] as const,
+                  )
+                : d.times.filter(Boolean).map((t) => [t, t] as const)
+              ).map(([key, label]) => (
+                <label key={key} className="grid grid-cols-[3rem_1fr] items-center gap-2 text-sm">
+                  <span className="text-ink-soft">{label}</span>
+                  <select
+                    aria-label={`Кто делает: ${label}`}
+                    className="bg-card border-line min-h-11 w-full min-w-0 rounded-2xl border px-2"
+                    value={d.dutyMap[key] ?? ''}
+                    onChange={(e) => set('dutyMap', { ...d.dutyMap, [key]: e.target.value })}
+                  >
+                    <option value="">Любой</option>
+                    {(members.data ?? []).map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name || m.email}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+          ) : null}
           {d.who === 'one' ? (
             <select
               aria-label="Ответственный"
@@ -533,9 +593,9 @@ function Editor({ task }: { task?: Task }) {
             </div>
           ) : (
             <p className="text-ink-soft mt-1.5 text-xs">
-              {d.who === 'one'
-                ? 'Напоминания будут приходить только этому человеку.'
-                : 'Напоминания всем (или в семейный чат), отмечает тот, кто сделал.'}
+              {d.who === 'anyone'
+                ? 'Напоминания всем (или в семейный чат), отмечает тот, кто сделал.'
+                : 'Напоминание придёт тому, чья очередь; если его нет дома — остальным. Отметить может любой.'}
             </p>
           )}
         </div>

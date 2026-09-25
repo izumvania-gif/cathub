@@ -70,6 +70,9 @@ async function screens(page: Page) {
   await page.goto('/room');
   await expect(page.getByRole('heading', { name: 'Магазин' })).toBeVisible();
   found.push(...(await scan(page, 'room-shop')));
+  await page.goto('/duties');
+  await expect(page.getByRole('heading', { name: 'Обязанности' })).toBeVisible();
+  found.push(...(await scan(page, 'duties')));
   return found;
 }
 

@@ -515,6 +515,13 @@ export function Household() {
 
       <h2 className="text-ink-soft mb-2 mt-8 px-1 text-sm font-semibold">Кот</h2>
       <Link
+        href="/duties"
+        className="bg-card mb-3 flex min-h-14 items-center justify-between rounded-3xl px-4 font-medium"
+      >
+        Обязанности: кто за что, неделя, отъезды
+        <span aria-hidden>→</span>
+      </Link>
+      <Link
         href="/room"
         className="bg-card mb-4 flex min-h-14 items-center justify-between rounded-3xl px-4 font-medium"
       >

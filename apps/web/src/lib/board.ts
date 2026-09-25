@@ -1,8 +1,22 @@
-import { evaluate, urgencyCompare, type Evaluation } from '@cathub/core';
+import {
+  assigneeFor,
+  evaluate,
+  urgencyCompare,
+  type Assignment,
+  type DutyContext,
+  type Evaluation,
+} from '@cathub/core';
 import { useEffect, useMemo, useState } from 'react';
 import { useOutbox } from './outbox';
 import { toIso } from './pb';
-import { useCompletions, useHousehold, useSnoozes, useTasks } from './queries';
+import {
+  useAbsences,
+  useCompletions,
+  useHousehold,
+  useOverrides,
+  useSnoozes,
+  useTasks,
+} from './queries';
 import type { Completion, Task } from './types';
 
 export const DEFAULT_TZ = 'Europe/Moscow';
@@ -10,6 +24,8 @@ export const DEFAULT_TZ = 'Europe/Moscow';
 export interface BoardItem {
   task: Task;
   ev: Evaluation;
+  /** Who does the current/next occurrence (core's assigneeFor). */
+  who: Assignment;
   /** Latest completion record (with the user expanded) for "who did it". */
   last: Completion | null;
   /** Record covering the current slot/period (double-completion warning). */
@@ -30,6 +46,27 @@ export function useTz() {
   return useHousehold().data?.timezone || DEFAULT_TZ;
 }
 
+/** Inputs for core's assigneeFor(): zones, hand-overs and absences. */
+export function useDutyContext(): DutyContext {
+  const household = useHousehold();
+  const overrides = useOverrides();
+  const absences = useAbsences();
+  const tz = household.data?.timezone || DEFAULT_TZ;
+  return useMemo(
+    () => ({
+      tz,
+      zones: household.data?.duty_zones ?? null,
+      overrides: (overrides.data ?? []).map((o) => ({
+        task: o.task,
+        occurrence: o.occurrence_at,
+        user: o.user,
+      })),
+      absences: (absences.data ?? []).map((a) => ({ user: a.user, from: a.from, to: a.to })),
+    }),
+    [tz, household.data?.duty_zones, overrides.data, absences.data],
+  );
+}
+
 /** All active tasks evaluated with the core engine, most urgent first. */
 export function useBoard() {
   const tasks = useTasks();
@@ -38,6 +75,7 @@ export function useBoard() {
   const tz = useTz();
   const tick = useNow();
   const queued = useOutbox();
+  const duty = useDutyContext();
 
   // "Now" is never earlier than the last data load: a completion made a second ago must not
   // look like it's in the future (the engine ignores those) until the next tick.
@@ -82,12 +120,13 @@ export function useBoard() {
         return {
           task,
           ev,
+          who: assigneeFor(task, ev.due, duty),
           last: find(ev.lastCompletion?.doneAt),
           covered: find(ev.coveredBy?.doneAt),
         };
       })
       .sort((a, b) => urgencyCompare(a.ev, b.ev));
-  }, [tasks.data, completions.data, snoozes.data, queued, nowMs, tz]);
+  }, [tasks.data, completions.data, snoozes.data, queued, nowMs, tz, duty]);
 
   return {
     items,

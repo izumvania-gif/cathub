@@ -28,6 +28,7 @@ function item(schedule: Schedule, done: string[], now: Date, task: Partial<Task>
       ...task,
     } as Task,
     ev,
+    who: { user: null, source: 'anyone' },
     last: completions.at(-1) ?? null,
     covered,
   };

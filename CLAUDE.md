@@ -89,6 +89,14 @@ pnpm-workspaces monorepo:
   `POST /api/cathub/telegram/webapp-auth`, which asks the bot's internal `/webapp-verify` to check
   the HMAC (the bot holds `BOT_TOKEN`) and returns a PocketBase auth for the user with that
   `telegram_chat_id`.
+- Duties (docs/PLAN.md §6.5): core's `assigneeFor(task, occurrence, ctx)` decides whose turn it
+  is: a `duty_overrides` hand-over for that occurrence → the task's `assign_mode` (`zone` uses
+  `households.duty_zones` by category and weekday; `weekday`/`slot` use `tasks.duty_map`;
+  `one`/`rotation` use `assignee`; `''` on old tasks = derived from assignee/rotation) → nobody
+  ("anyone") if that person has an `absences` entry for the day. The web board (`BoardItem.who`),
+  the bot's routing, digest («Твои/Общие») and the week view all use it. The bot's buttons:
+  `t` takes a chore in the family chat, `p` asks whom to pass it to, `g` gives it; hand-overs made
+  in the app are announced by `notifyHandOvers`. People who are away get no reminders or digest.
 - Fish 🐟 (docs/PLAN.md §6.7): core's `rewardFor` prices a completion from the task's status at
   that moment (weight × 5, ×1.5 on time, 0 for a repeat or a skip). The bot's tick
   (`ReminderService.rewardPending`) stores it in `completions.fish` + `rewarded`; clients can't set

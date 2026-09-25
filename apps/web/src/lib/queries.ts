@@ -2,6 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { pb, toIso } from './pb';
 import type {
+  AbsenceRec,
+  DutyOverrideRec,
   Cat,
   Completion,
   HealthRecord,
@@ -26,6 +28,8 @@ export const keys = {
   measurements: ['measurements'] as const,
   supplies: ['supplies'] as const,
   room: ['room'] as const,
+  overrides: ['overrides'] as const,
+  absences: ['absences'] as const,
   fish: ['fish'] as const,
 };
 
@@ -200,6 +204,40 @@ export function useFishByUser() {
   });
 }
 
+/** Hand-overs made in the last 60 days. */
+export function useOverrides() {
+  const user = useUser();
+  return useQuery({
+    queryKey: [...keys.overrides, user?.household],
+    enabled: Boolean(user?.household),
+    queryFn: async () => {
+      // By creation: a hand-over of an overdue chore can point months back.
+      const since = new Date(Date.now() - 60 * 86_400_000).toISOString().replace('T', ' ');
+      return (
+        await pb.collection('duty_overrides').getFullList<DutyOverrideRec>({
+          filter: pb.filter('created >= {:since}', { since }),
+        })
+      ).map((o) => ({ ...o, occurrence_at: toIso(o.occurrence_at) }));
+    },
+  });
+}
+
+/** Current and future absences. */
+export function useAbsences() {
+  const user = useUser();
+  return useQuery({
+    queryKey: [...keys.absences, user?.household],
+    enabled: Boolean(user?.household),
+    queryFn: () => {
+      const today = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+      return pb.collection('absences').getFullList<AbsenceRec>({
+        filter: pb.filter('to >= {:today}', { today }),
+        sort: 'from',
+      });
+    },
+  });
+}
+
 /** Live updates: when anyone in the household changes something, refetch. */
 export function useRealtimeSync() {
   const qc = useQueryClient();
@@ -212,6 +250,8 @@ export function useRealtimeSync() {
       ['room_items', keys.room],
       ['room_items', keys.fish],
       ['fish_bonuses', keys.fish],
+      ['duty_overrides', keys.overrides],
+      ['absences', keys.absences],
       ['completions', keys.measurements],
       ['health_records', keys.health],
       ['supplies', keys.supplies],

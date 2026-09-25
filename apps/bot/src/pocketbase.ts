@@ -2,10 +2,12 @@ import PocketBase, { ClientResponseError } from 'pocketbase';
 import { config } from './config';
 import { log } from './log';
 import type {
+  AbsenceRec,
   CatRec,
   CompletionRec,
   HouseholdRec,
   HouseholdState,
+  OverrideRec,
   ReminderLogRec,
   SnoozeRec,
   SupplyRec,
@@ -74,22 +76,40 @@ export class PocketBaseClient {
   async loadAll(): Promise<HouseholdState[]> {
     await this.ensureAuth();
     const since = toPbDate(new Date(Date.now() - RECENT_DAYS * 86_400_000));
-    const [households, users, cats, tasks, recent, snoozes, supplies, balances] = await Promise.all(
-      [
-        this.pb.collection('households').getFullList<HouseholdRec>(),
-        this.pb.collection('users').getFullList<UserRec>({ filter: 'household != ""' }),
-        this.pb.collection('cats').getFullList<CatRec>({ sort: 'created' }),
-        this.pb.collection('tasks').getFullList<TaskRec>({ filter: 'archived = false' }),
-        this.pb
-          .collection('completions')
-          .getFullList<CompletionRec>({ filter: this.pb.filter('done_at >= {:since}', { since }) }),
-        this.pb.collection('snoozes').getFullList<SnoozeRec>(),
-        this.pb.collection('supplies').getFullList<SupplyRec>(),
-        this.pb
-          .collection('fish_balance')
-          .getFullList<{ id: string; from_tasks: number; from_bonuses: number; spent: number }>(),
-      ],
-    );
+    // Hand-overs by creation: one for an overdue chore can point months back.
+    const handedSince = toPbDate(new Date(Date.now() - 60 * 86_400_000));
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const [
+      households,
+      users,
+      cats,
+      tasks,
+      recent,
+      snoozes,
+      supplies,
+      balances,
+      overrides,
+      absences,
+    ] = await Promise.all([
+      this.pb.collection('households').getFullList<HouseholdRec>(),
+      this.pb.collection('users').getFullList<UserRec>({ filter: 'household != ""' }),
+      this.pb.collection('cats').getFullList<CatRec>({ sort: 'created' }),
+      this.pb.collection('tasks').getFullList<TaskRec>({ filter: 'archived = false' }),
+      this.pb
+        .collection('completions')
+        .getFullList<CompletionRec>({ filter: this.pb.filter('done_at >= {:since}', { since }) }),
+      this.pb.collection('snoozes').getFullList<SnoozeRec>(),
+      this.pb.collection('supplies').getFullList<SupplyRec>(),
+      this.pb
+        .collection('fish_balance')
+        .getFullList<{ id: string; from_tasks: number; from_bonuses: number; spent: number }>(),
+      this.pb.collection('duty_overrides').getFullList<OverrideRec>({
+        filter: this.pb.filter('created >= {:s}', { s: handedSince }),
+      }),
+      this.pb
+        .collection('absences')
+        .getFullList<AbsenceRec>({ filter: this.pb.filter('to >= {:d}', { d: yesterday }) }),
+    ]);
     const withRecent = new Set(recent.map((c) => c.task));
     const older = await Promise.all(
       tasks.filter((t) => !withRecent.has(t.id)).map((t) => this.latestOlder(t.id)),
@@ -109,6 +129,10 @@ export class PocketBaseClient {
       supplies: supplies
         .filter((s) => s.household === household.id)
         .map((s) => ({ ...s, stock_at: toIso(s.stock_at) })),
+      overrides: overrides
+        .filter((o) => o.household === household.id)
+        .map((o) => ({ ...o, occurrence_at: toIso(o.occurrence_at) })),
+      absences: absences.filter((a) => a.household === household.id),
       fish: (() => {
         const b = balances.find((x) => x.id === household.id);
         return b ? b.from_tasks + b.from_bonuses - b.spent : undefined;
@@ -219,6 +243,37 @@ export class PocketBaseClient {
     this.olderCache.delete(task.id);
     await this.clearSnoozes(task.id);
     return { ...rec, done_at: toIso(rec.done_at) };
+  }
+
+  // ── duties ────────────────────────────────────────────────────────────────
+
+  /** Gives one occurrence of a task to `userId` (replacing an earlier hand-over). */
+  async handOver(
+    task: TaskRec,
+    occurrence: Date,
+    userId: string,
+    byId: string,
+    notified: boolean,
+  ): Promise<void> {
+    await this.ensureAuth();
+    const at = toPbDate(occurrence);
+    const old = await this.pb.collection('duty_overrides').getFullList({
+      filter: this.pb.filter('task = {:t} && occurrence_at = {:at}', { t: task.id, at }),
+    });
+    for (const o of old) await this.pb.collection('duty_overrides').delete(o.id);
+    await this.pb.collection('duty_overrides').create({
+      household: task.household,
+      task: task.id,
+      occurrence_at: at,
+      user: userId,
+      by: byId,
+      notified,
+    });
+  }
+
+  async markOverrideNotified(id: string): Promise<void> {
+    await this.ensureAuth();
+    await this.pb.collection('duty_overrides').update(id, { notified: true });
   }
 
   // ── fish 🐟 ───────────────────────────────────────────────────────────────

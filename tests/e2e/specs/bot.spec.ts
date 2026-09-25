@@ -338,3 +338,118 @@ test('the bot sets the Mini App menu button', async () => {
   const menu = calls.find((c) => c.method === 'setChatMenuButton');
   expect(JSON.stringify(menu?.params)).toContain('web_app');
 });
+
+/** Маша (owner) and Петя, both with Telegram linked, quiet hours and digest off. */
+async function linkedFamily() {
+  const { owner, household, chat } = await linkedOwner();
+  const petya = await createUser('Петя');
+  const h = await api<{ invite_code: string }>(
+    'GET',
+    `/api/collections/households/records/${household.id}`,
+    undefined,
+    owner.token,
+  );
+  await api('POST', '/api/cathub/join', { code: h.invite_code }, petya.token);
+  await setUser(petya, { ...NO_QUIET, digest_time: '' });
+  const petyaChat = newChatId();
+  await linkTelegram(petya, petyaChat);
+  await waitForCall(petyaChat, (c) => String(c.params.text).includes('Готово'), 'Петя linked');
+  return { owner, household, chat, petya, petyaChat };
+}
+
+const todayWeekday = () => {
+  const d = new Intl.DateTimeFormat('en-US', {
+    weekday: 'short',
+    timeZone: 'Europe/Moscow',
+  }).format(new Date());
+  return String(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(d) + 1);
+};
+
+test('duties: a by-weekday task reminds whoever has today; "Передать" hands it over', async () => {
+  const { owner, household, chat, petya, petyaChat } = await linkedFamily();
+  const task = await createTask(owner, household.id, {
+    ...dueTodayTask('Лоток по дням'),
+    assign_mode: 'weekday',
+    duty_map: { [todayWeekday()]: petya.id },
+  });
+
+  const reminder = await waitForCall(petyaChat, isReminder('Лоток по дням'), 'Петя reminded');
+  await new Promise((r) => setTimeout(r, 2000));
+  expect((await tgCalls(chat)).filter(isReminder('Лоток по дням'))).toHaveLength(0);
+
+  // 👉 → "to whom?" → Маша.
+  await press(petyaChat, petyaChat, button(reminder, 'Передать'));
+  const picker = await waitForCall(
+    petyaChat,
+    (c) => c.method === 'sendMessage' && String(c.params.text).includes('Кому передать'),
+    'picker shown',
+  );
+  expect(await press(petyaChat, petyaChat, button(picker, 'Маша'))).toContain('Передано');
+  await waitForCall(
+    chat,
+    (c) =>
+      c.method === 'sendMessage' &&
+      String(c.params.text).includes('передал(а) тебе') &&
+      String(c.params.text).includes('Лоток по дням'),
+    'Маша told about the hand-over',
+  );
+  const overrides = await api<{ items: Array<{ user: string; by: string }> }>(
+    'GET',
+    `/api/collections/duty_overrides/records?filter=${encodeURIComponent(`task='${task.id}'`)}`,
+    undefined,
+    owner.token,
+  );
+  expect(overrides.items).toEqual([expect.objectContaining({ user: owner.id, by: petya.id })]);
+});
+
+test('duties: "Возьму" in the family chat takes a shared chore', async () => {
+  const { owner, household, chat, petya, petyaChat } = await linkedFamily();
+  const group = -newChatId();
+  const { url } = await api<{ url: string }>(
+    'POST',
+    '/api/cathub/telegram/group-link',
+    undefined,
+    owner.token,
+  );
+  const token = new URL(url).searchParams.get('startgroup')!;
+  await tgInject(tgMessage(group, chat, `/start@cathub_e2e_bot ${token}`, 'group'));
+  await waitForCall(group, (c) => String(c.params.text).includes('Готово'), 'group linked');
+
+  const task = await createTask(owner, household.id, {
+    ...dueTodayTask('Общий лоток'),
+    assign_mode: 'anyone',
+  });
+  const shared = await waitForCall(group, isReminder('Общий лоток'), 'group reminder');
+  expect(await press(petyaChat, group, button(shared, 'Возьму'))).toContain('ваше');
+  await waitForCall(
+    group,
+    (c) => c.method === 'sendMessage' && String(c.params.text).includes('Петя берёт на себя'),
+    'group told',
+  );
+  const overrides = await api<{ items: Array<{ user: string }> }>(
+    'GET',
+    `/api/collections/duty_overrides/records?filter=${encodeURIComponent(`task='${task.id}'`)}`,
+    undefined,
+    owner.token,
+  );
+  expect(overrides.items).toEqual([expect.objectContaining({ user: petya.id })]);
+});
+
+test('duties: while the assignee is away, the others get the reminder', async () => {
+  const { owner, household, chat, petya, petyaChat } = await linkedFamily();
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Moscow' }).format(new Date());
+  await api(
+    'POST',
+    '/api/collections/absences/records',
+    { household: household.id, user: petya.id, from: today, to: today },
+    petya.token,
+  );
+  await createTask(owner, household.id, {
+    ...dueTodayTask('Петин лоток'),
+    assign_mode: 'one',
+    assignee: petya.id,
+  });
+  await waitForCall(chat, isReminder('Петин лоток'), 'Маша reminded while Петя is away');
+  await new Promise((r) => setTimeout(r, 2000));
+  expect((await tgCalls(petyaChat)).filter(isReminder('Петин лоток'))).toHaveLength(0);
+});

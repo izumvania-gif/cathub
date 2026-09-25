@@ -7,7 +7,10 @@ import { Link } from 'wouter';
 import { useTaskActions } from '../lib/actions';
 import { useCompleteFlow } from '../lib/completeFlow';
 import type { BoardItem } from '../lib/board';
+import { useUser } from '../lib/auth';
+import { useDutyActions } from '../lib/duties';
 import { errorMessage } from '../lib/pb';
+import { useMembers } from '../lib/queries';
 import { Sheet } from './Sheet';
 import { Button, Field, Input } from './ui';
 
@@ -67,7 +70,13 @@ export function TaskActionsSheet({
 }) {
   const actions = useTaskActions();
   const flow = useCompleteFlow();
-  const [mode, setMode] = useState<'menu' | 'backdate'>('menu');
+  const [mode, setMode] = useState<'menu' | 'backdate' | 'pass'>('menu');
+  const duties = useDutyActions();
+  const members = useMembers();
+  const me = useUser();
+  const family = (members.data?.length ?? 0) > 1;
+  const nameOf = (id: string | null | undefined) =>
+    members.data?.find((m) => m.id === id)?.name ?? 'Кто-то';
   const [when, setWhen] = useState(() => localInputValue(new Date()));
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
@@ -137,7 +146,35 @@ export function TaskActionsSheet({
             </div>
           ) : null}
 
-          {mode === 'backdate' ? (
+          {mode === 'pass' && item.ev.due ? (
+            <div className="mt-5 grid gap-2">
+              <p className="text-ink-soft text-sm">Кому передать этот раз?</p>
+              {(members.data ?? [])
+                .filter((m) => m.id !== item.who.user)
+                .map((m) => (
+                  <Button
+                    key={m.id}
+                    variant="secondary"
+                    busy={busy}
+                    onClick={() =>
+                      act(async () => {
+                        await duties.handOver(task, item.ev.due!, m.id);
+                        toast.success(
+                          m.id === me?.id
+                            ? 'Вы взяли это на себя'
+                            : `Передано: ${m.name || m.email}`,
+                        );
+                      })
+                    }
+                  >
+                    {m.id === me?.id ? 'Себе' : m.name || m.email}
+                  </Button>
+                ))}
+              <Button variant="ghost" onClick={() => setMode('menu')}>
+                Назад
+              </Button>
+            </div>
+          ) : mode === 'backdate' ? (
             <div className="mt-5 grid gap-3">
               <Field label="Когда сделано">
                 <Input
@@ -195,6 +232,51 @@ export function TaskActionsSheet({
                   Завтра утром
                 </Button>
               </div>
+              {family && item.ev.due ? (
+                <div className="bg-tint mt-1 rounded-2xl p-3">
+                  <p className="text-sm">
+                    Этот раз:{' '}
+                    <b className="font-semibold">
+                      {item.who.user
+                        ? item.who.user === me?.id
+                          ? 'вы'
+                          : nameOf(item.who.user)
+                        : 'любой'}
+                    </b>
+                    {item.who.source === 'override' ? ' (передали)' : ''}
+                    {item.who.away ? ` · ${nameOf(item.who.away)} в отъезде` : ''}
+                  </p>
+                  <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2">
+                    {item.who.user !== me?.id ? (
+                      <Button
+                        variant="secondary"
+                        className="bg-card"
+                        busy={busy}
+                        onClick={() =>
+                          act(async () => {
+                            await duties.handOver(task, item.ev.due!, me!.id);
+                            toast.success('Вы взяли это на себя');
+                          })
+                        }
+                      >
+                        🙋 Возьму
+                      </Button>
+                    ) : null}
+                    <Button variant="secondary" className="bg-card" onClick={() => setMode('pass')}>
+                      👉 Передать…
+                    </Button>
+                    {item.who.source === 'override' ? (
+                      <Button
+                        variant="ghost"
+                        busy={busy}
+                        onClick={() => act(() => duties.undoHandOver(task, item.ev.due!))}
+                      >
+                        Вернуть как было
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
               <Button
                 variant="ghost"
                 onClick={() => act(() => flow.run(task, { kind: 'skipped' }))}

@@ -258,3 +258,78 @@ test('rotation: the turn passes to the next person and comes back on undo', asyn
   await api('DELETE', `/api/collections/completions/records/${c.id}`, undefined, petya.token);
   expect(await assignee()).toBe(petya.id);
 });
+
+test('duties: members edit zones only; hand-overs and absences are checked', async () => {
+  const masha = await createUser('Маша');
+  const petya = await createUser('Петя');
+  const { household } = await createHousehold(masha, [petya]);
+  const stranger = await createUser('Чужой');
+  const { household: other } = await createHousehold(stranger);
+  const path = `/api/collections/households/records/${household.id}`;
+
+  // Any member can set zones; renaming the household stays with the owner.
+  const zones = { litter: { user: petya.id, weekdays: { 6: masha.id } } };
+  expect(
+    await api<{ duty_zones: unknown }>('PATCH', path, { duty_zones: zones }, petya.token),
+  ).toMatchObject({
+    duty_zones: zones,
+  });
+  expect(await statusOf(api('PATCH', path, { name: 'Мой дом' }, petya.token))).not.toBe(200);
+
+  const task = await createTask(masha, household.id, dueTodayTask('Лоток'));
+  const handOver = (token: string, body: Record<string, unknown>) =>
+    api<{ id: string }>(
+      'POST',
+      '/api/collections/duty_overrides/records',
+      {
+        household: household.id,
+        task: task.id,
+        occurrence_at: new Date().toISOString(),
+        ...body,
+      },
+      token,
+    );
+  // Only as yourself, only to a member, never pre-"notified".
+  expect(await statusOf(handOver(petya.token, { user: masha.id, by: masha.id }))).toBe(400);
+  expect(await statusOf(handOver(petya.token, { user: stranger.id, by: petya.id }))).toBe(400);
+  expect(
+    await statusOf(handOver(petya.token, { user: masha.id, by: petya.id, notified: true })),
+  ).toBe(400);
+  const o = await handOver(petya.token, { user: masha.id, by: petya.id });
+  expect(
+    await statusOf(
+      api('GET', `/api/collections/duty_overrides/records/${o.id}`, undefined, stranger.token),
+    ),
+  ).toBe(404);
+  expect(
+    await statusOf(
+      api(
+        'POST',
+        '/api/collections/duty_overrides/records',
+        {
+          household: other.id,
+          task: task.id,
+          occurrence_at: new Date().toISOString(),
+          user: stranger.id,
+          by: stranger.id,
+        },
+        stranger.token,
+      ),
+    ),
+  ).toBe(400);
+
+  // Absences: only your own; the owner can remove anyone's.
+  const away = (token: string, user: string) =>
+    api<{ id: string }>(
+      'POST',
+      '/api/collections/absences/records',
+      { household: household.id, user, from: '2026-10-01', to: '2026-10-05' },
+      token,
+    );
+  expect(await statusOf(away(petya.token, masha.id))).toBe(400);
+  const a = await away(petya.token, petya.id);
+  const del = (token: string) =>
+    statusOf(api('DELETE', `/api/collections/absences/records/${a.id}`, undefined, token));
+  expect(await del(stranger.token)).toBe(404);
+  expect(await del(masha.token)).toBe(200);
+});

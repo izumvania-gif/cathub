@@ -102,6 +102,7 @@ export function Onboarding() {
           title: t.title,
           emoji: t.emoji,
           category: t.category,
+          assign_mode: 'zone',
           schedule: scheduleFromTemplate(t, fullAnswers, tz, lastDone[t.key]),
           track_value: t.trackValue ?? null,
           template_key: t.key,

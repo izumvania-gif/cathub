@@ -2,7 +2,15 @@ import { evaluate } from '@cathub/core';
 import type { Bot, Context } from 'grammy';
 import { config } from './config';
 import { log } from './log';
-import { parseCallback, resolutionLine, summaryText, timeIn } from './messages';
+import { whoDoes } from './duty';
+import {
+  escapeHtml,
+  parseCallback,
+  passKeyboard,
+  resolutionLine,
+  summaryText,
+  timeIn,
+} from './messages';
 import type { PocketBaseClient } from './pocketbase';
 import type { ReminderService } from './reminders';
 import type { HouseholdState } from './types';
@@ -73,6 +81,7 @@ export function registerHandlers(bot: Bot, { db, reminders, status }: HandlerDep
 
   bot.command('today', async (ctx) => {
     let state: HouseholdState | null;
+    let forUser: string | undefined;
     if (isGroup(ctx)) {
       state = await householdOfGroup(db, ctx.chat.id);
       if (!state) return ctx.reply('Этот чат не подключён. В приложении: «Дом» → «Семейный чат».');
@@ -84,12 +93,14 @@ export function registerHandlers(bot: Bot, { db, reminders, status }: HandlerDep
         );
       state = await householdOf(db, user.household);
       if (!state) return ctx.reply('Не нашёл ваш дом.');
+      forUser = user.id;
     }
     const { text } = summaryText(
       state,
       new Date(),
       `Сегодня у ${state.cat?.name ?? 'кота'}`,
       config.appUrl,
+      forUser,
     );
     return ctx.reply(text, { parse_mode: 'HTML' });
   });
@@ -147,6 +158,46 @@ export function registerHandlers(bot: Bot, { db, reminders, status }: HandlerDep
       });
       await reminders.resolveHandled(await db.loadAll(), now);
       return;
+    }
+
+    if (cb.action === 't' || cb.action === 'g') {
+      // "I'll take it" (from the family chat) or "give it to …" (after 👉).
+      const to = cb.action === 't' ? user : state.users.find((u) => u.id === cb.userId);
+      if (!to) return ctx.answerCallbackQuery({ text: 'Этого человека больше нет в доме.' });
+      await db.handOver(task, cb.occurrence, to.id, user.id, to.id === user.id);
+      if (cb.action === 't') {
+        await ctx.answerCallbackQuery({ text: 'Теперь это ваше 🙋' });
+        await ctx.reply(
+          `🙋 ${escapeHtml(user.name || 'Кто-то')} берёт на себя: ${task.emoji || '🐾'} ${escapeHtml(task.title)}`,
+          { parse_mode: 'HTML' },
+        );
+      } else {
+        await ctx.answerCallbackQuery({ text: `Передано: ${to.name}` });
+        await ctx
+          .editMessageText(
+            `👉 Передано: ${escapeHtml(to.name || '')} — ${escapeHtml(task.title)}`,
+            {
+              parse_mode: 'HTML',
+            },
+          )
+          .catch(() => {});
+        // Tell them right away rather than on the next tick.
+        await reminders.notifyHandOvers(await db.loadAll(), now);
+      }
+      return;
+    }
+
+    if (cb.action === 'p') {
+      const current = whoDoes(state, task, cb.occurrence).user;
+      const people = state.users
+        .filter((u) => u.id !== current && u.id !== user.id)
+        .map((u) => ({ id: u.id, name: u.name || 'Без имени' }));
+      if (!people.length) return ctx.answerCallbackQuery({ text: 'Передать некому.' });
+      await ctx.answerCallbackQuery();
+      return ctx.reply(`Кому передать «${escapeHtml(task.title)}»?`, {
+        parse_mode: 'HTML',
+        reply_markup: passKeyboard(task.id, cb.occurrence, people),
+      });
     }
 
     if (cb.action === 'z') {

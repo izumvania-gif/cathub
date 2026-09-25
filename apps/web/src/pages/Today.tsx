@@ -10,7 +10,8 @@ import { SleepyCat } from '../components/SleepyCat';
 import { DoubleCheckSheet, TaskActionsSheet } from '../components/TaskActions';
 import { useCompleteFlow } from '../lib/completeFlow';
 import { TaskCard } from '../components/TaskCard';
-import { Button, Empty } from '../components/ui';
+import { Button, Empty, Segmented } from '../components/ui';
+import { useUser } from '../lib/auth';
 import { useBoard, type BoardItem } from '../lib/board';
 import { bowlLevel, catMood, findFeeding, isEvening } from '../lib/catMood';
 import { useCatLook } from '../lib/catLook';
@@ -22,6 +23,7 @@ import { SupplyRow, SupplySheet } from '../components/Supplies';
 import { useSupplyForecasts } from '../lib/supplies';
 
 const WEEK = 7 * 86_400_000;
+const SCOPE_KEY = 'cathub.todayScope';
 
 /** The cat's room with its mood, plus who fed it and when (or a button to feed it). */
 function CatHero({
@@ -158,13 +160,34 @@ export function Today() {
   const supplies = useSupplyForecasts();
   const members = useMembers();
   const nameOf = (id: string) => members.data?.find((m) => m.id === id)?.name;
+  const me = useUser();
+  const [scope, setScope] = useState<'all' | 'mine'>(() => {
+    try {
+      return localStorage.getItem(SCOPE_KEY) === 'mine' ? 'mine' : 'all';
+    } catch {
+      return 'all';
+    }
+  });
+  const changeScope = (v: 'all' | 'mine') => {
+    setScope(v);
+    try {
+      localStorage.setItem(SCOPE_KEY, v);
+    } catch {
+      /* private mode */
+    }
+  };
+  const family = (members.data?.length ?? 0) > 1;
   const lowSupplies = supplies.list.filter((x) => x.f.status !== 'ok');
   const [openSupply, setOpenSupply] = useState<string | null>(null);
   const selectedSupply = supplies.list.find((x) => x.supply.id === openSupply) ?? null;
 
   // The hero shows the feeding task: the template one, else a custom daily feeding task.
   const feeding = findFeeding(items);
-  const rest = items.filter((i) => i !== feeding);
+  // "Мои": what's mine this time, plus what's anyone's.
+  const rest = items.filter(
+    (i) =>
+      i !== feeding && (!family || scope === 'all' || i.who.user === null || i.who.user === me?.id),
+  );
   const is =
     (...s: Evaluation['status'][]) =>
     (i: BoardItem) =>
@@ -188,7 +211,9 @@ export function Today() {
       tz={tz}
       onComplete={() => flow.request(i)}
       onOpen={() => setOpen(i)}
-      assignee={i.task.assignee ? nameOf(i.task.assignee) : undefined}
+      assignee={
+        i.who.user ? (i.who.user === me?.id && family ? 'ты' : nameOf(i.who.user)) : undefined
+      }
     />
   );
 
@@ -226,6 +251,18 @@ export function Today() {
             tz={tz}
             onFeed={() => feeding && flow.request(feeding)}
           />
+          {family ? (
+            <div className="mt-6">
+              <Segmented
+                value={scope}
+                onChange={changeScope}
+                options={[
+                  { value: 'all', label: 'Все дела' },
+                  { value: 'mine', label: 'Мои' },
+                ]}
+              />
+            </div>
+          ) : null}
           {lowSupplies.length ? (
             <section className="mt-6">
               <h2 className="text-ink-soft mb-2 px-1 text-sm font-semibold">Заканчивается</h2>

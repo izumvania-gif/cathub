@@ -1,4 +1,4 @@
-import type { Schedule, TaskCategory, TrackValue } from '@cathub/core';
+import type { AssignMode, DutyZones, Schedule, TaskCategory, TrackValue } from '@cathub/core';
 import type { RecordModel } from 'pocketbase';
 
 export interface User extends RecordModel {
@@ -20,6 +20,23 @@ export interface Household extends RecordModel {
   invite_code: string;
   telegram_group_chat_id: string;
   calendar_token: string;
+  duty_zones: DutyZones | null;
+}
+
+export interface DutyOverrideRec extends RecordModel {
+  household: string;
+  task: string;
+  occurrence_at: string;
+  user: string;
+  by: string;
+}
+
+export interface AbsenceRec extends RecordModel {
+  household: string;
+  user: string;
+  from: string;
+  to: string;
+  note: string;
 }
 
 export interface Cat extends RecordModel {
@@ -50,6 +67,9 @@ export interface Task extends RecordModel {
   template_key: string;
   /** 1–3, or 0 for the default by template/category (core's taskWeight). */
   weight: number;
+  /** See core's assignMode(); '' on tasks from before duty sharing. */
+  assign_mode: AssignMode | '';
+  duty_map: Record<string, string> | null;
   medical: boolean;
   notes: string;
   assignee: string;

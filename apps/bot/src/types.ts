@@ -1,10 +1,11 @@
-import type { Schedule } from '@cathub/core';
+import type { DutyZones, Schedule } from '@cathub/core';
 
 export interface HouseholdRec {
   id: string;
   name: string;
   timezone: string;
   telegram_group_chat_id: string;
+  duty_zones: DutyZones | null;
 }
 export interface UserRec {
   id: string;
@@ -35,6 +36,27 @@ export interface TaskRec {
   weight: number;
   template_key: string;
   created: string;
+  assign_mode: string;
+  duty_map: Record<string, string> | null;
+  rotation: string[];
+}
+
+export interface OverrideRec {
+  id: string;
+  household: string;
+  task: string;
+  occurrence_at: string;
+  user: string;
+  by: string;
+  notified: boolean;
+}
+
+export interface AbsenceRec {
+  id: string;
+  household: string;
+  user: string;
+  from: string;
+  to: string;
 }
 export interface CompletionRec {
   id: string;
@@ -87,4 +109,6 @@ export interface HouseholdState {
   supplies: SupplyRec[];
   /** Fish 🐟 balance (the fish_balance view), if known. */
   fish?: number;
+  overrides: OverrideRec[];
+  absences: AbsenceRec[];
 }

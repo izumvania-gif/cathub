@@ -6,3 +6,4 @@ export * from './reminders';
 export * from './ics';
 export * from './supplies';
 export * from './rewards';
+export * from './duties';

@@ -285,3 +285,34 @@ test('fish: a mark shows its reward, the shop sells an item once there is enough
   await expect(page.getByRole('button', { name: 'Коврик: в комнате' })).toBeVisible();
   await expect(page.getByText('🐟 60')).toBeVisible();
 });
+
+test('duties: a zone gives the litter to Петя, «Мои» hides it, «Возьму» takes it back', async ({
+  page,
+}) => {
+  const code = await onboard(page);
+  const { api, createUser } = await import('../support/api');
+  const petya = await createUser('Петя');
+  await api('POST', '/api/cathub/join', { code }, petya.token);
+  await page.reload();
+
+  await page.getByRole('link', { name: 'Дом' }).click();
+  await page.getByRole('link', { name: /Обязанности/ }).click();
+  await expect(page.getByRole('heading', { name: 'Обязанности' })).toBeVisible();
+  await page.getByLabel('Лоток: кто отвечает').selectOption({ label: 'Петя' });
+  await expect(page.getByText(/Петя:.*🧹/).first()).toBeVisible(); // the week view
+
+  await page.getByRole('link', { name: 'Сегодня' }).click();
+  const litter = page.getByRole('button', { name: /Полностью сменить наполнитель: действия/ });
+  await expect(page.getByText('· Петя').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Мои', exact: true }).click();
+  await expect(litter).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Все дела' }).click();
+  await litter.click();
+  await expect(page.getByText(/Этот раз:\s*Петя/)).toBeVisible();
+  await page.getByRole('button', { name: '🙋 Возьму' }).click();
+  await expect(page.getByText('Вы взяли это на себя')).toBeVisible();
+  await page.getByRole('button', { name: 'Мои', exact: true }).click();
+  await expect(litter).toBeVisible();
+  await expect(page.getByText('· ты').first()).toBeVisible();
+});

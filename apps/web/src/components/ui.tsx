@@ -81,6 +81,7 @@ export function Segmented<T extends string>({
         <button
           key={o.value}
           type="button"
+          aria-pressed={o.value === value}
           onClick={() => onChange(o.value)}
           className={clsx(
             'min-h-10 rounded-xl px-2 text-sm font-semibold transition',
