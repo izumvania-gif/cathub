@@ -322,15 +322,15 @@ Telegram в РФ нестабилен, поэтому **вход через Tele
 - [ ] Этап 0 на Amvera: «пустой» PocketBase + тестовый бот, проверки из [DEPLOY_AMVERA.md](DEPLOY_AMVERA.md) §2
 - [x] `CLAUDE.md`
 - [x] Доступ на запись в GitHub-репозиторий, push в `main`
-- [x] Каркас монорепо: pnpm, TS, ESLint/Prettier, Vitest, CI в GitHub Actions, Dockerfile + `amvera.yml`, страница `/#/diag`
+- [x] Каркас монорепо: pnpm, TS, ESLint/Prettier, Vitest, CI в GitHub Actions, Dockerfile + `amvera.yml`, страница `/diag`
 - [ ] Дизайн: палитра, шрифты, 3–4 макета ключевых экранов (можно прямо кодом в Storybook или Ladle)
 
 ### Фаза 1 — Ядро и MVP-интерфейс
-- [ ] `packages/core`: типы, `nextDue`, `status`, `occurrences` + тесты граничных случаев
-- [ ] PocketBase: коллекции, API rules, миграции, сиды шаблонов
-- [ ] Web: auth, онбординг, экран «Сегодня», отметка, undo, «задним числом», журнал
-- [ ] Редактор дела и расписания
-- [ ] PWA: манифест, иконки, установка, safe-area
+- [x] `packages/core`: типы, `nextDue`, `status`, `occurrences` + тесты граничных случаев
+- [x] PocketBase: коллекции, API rules, миграции, маршруты дома и приглашений (шаблоны дел — в `packages/core`)
+- [x] Web: auth, онбординг, экран «Сегодня», отметка, undo, «задним числом», журнал
+- [x] Редактор дела и расписания
+- [x] PWA: манифест, иконки, установка, safe-area
 - [ ] Продакшен-деплой на Amvera (свой домен, бэкапы в S3)
 
 ### Фаза 2 — Telegram

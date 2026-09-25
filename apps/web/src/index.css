@@ -1,24 +1,77 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/onest';
+@import '@fontsource-variable/unbounded';
 
-@theme {
+/* Palette: "black cat with amber eyes". Tokens switch for dark mode below. */
+:root {
+  --paper: #f3f2f8;
+  --card: #ffffff;
+  --ink: #23264f;
+  --ink-soft: #5d6088;
+  --line: #e3e2ee;
+  --amber: #f5b62e;
+  --amber-ink: #6b4a00;
+  --mint: #35a374;
+  --tomato: #e2563a;
+  --tint: #e9e8f5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #14162c;
+    --card: #1d2040;
+    --ink: #eceaff;
+    --ink-soft: #a3a5c9;
+    --line: #2c2f55;
+    --amber: #f7c04a;
+    --amber-ink: #2a1d00;
+    --mint: #4cc08e;
+    --tomato: #f2735a;
+    --tint: #262a52;
+  }
+}
+
+@theme inline {
   --font-sans: 'Onest Variable', system-ui, sans-serif;
-  --color-cream: #fff8f0;
-  --color-ink: #2b1d14;
-  --color-muted: #8a7566;
-  --color-accent: #f97316;
-  --color-ok: #16a34a;
-  --color-warn: #d97706;
-  --color-bad: #dc2626;
+  --font-display: 'Unbounded Variable', 'Onest Variable', sans-serif;
+  --color-paper: var(--paper);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-line: var(--line);
+  --color-amber: var(--amber);
+  --color-amber-ink: var(--amber-ink);
+  --color-mint: var(--mint);
+  --color-tomato: var(--tomato);
+  --color-tint: var(--tint);
 }
 
 @layer base {
   html,
   body {
-    @apply bg-cream text-ink font-sans antialiased;
+    @apply bg-paper text-ink font-sans antialiased;
+    -webkit-tap-highlight-color: transparent;
   }
   body {
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
-      env(safe-area-inset-left);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  :focus-visible {
+    outline: 2px solid var(--amber);
+    outline-offset: 2px;
+  }
+  input,
+  select,
+  textarea {
+    @apply text-base;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

@@ -1,7 +1,7 @@
 /// <reference path="../pb_data/types.d.ts" />
 
 // Stage-0 diagnostics (docs/DEPLOY_AMVERA.md §2): the bot writes a heartbeat every minute
-// with the result of a Telegram probe; the web /#/diag page watches it via realtime (SSE).
+// with the result of a Telegram probe; the web /diag page watches it via realtime (SSE).
 // Readable by anyone, writable only by superusers.
 migrate(
   (app) => {

@@ -8,9 +8,10 @@ CatHub is a mobile-first PWA for a household (several people, one cat) to track 
 feeding, litter, grooming, parasite treatments, vaccinations, vet visits. Reminders go through a
 Telegram bot. The owner and users are in Russia. The UI language is Russian.
 
-**Current state: Phase 0 scaffold.** The monorepo, CI and the Amvera deploy files exist. The app
-itself is a placeholder home screen plus a `/#/diag` page, and the bot only answers `/start` and
-`/ping` and writes heartbeats. The source of truth for scope, data model, and phases is
+**Current state: Phase 1 (MVP UI) mostly done.** Working: the schedule engine in `packages/core`,
+the PocketBase schema and household routes, and the web app (login, onboarding, Today, journal,
+task list and editor, household settings, `/diag`). The bot still only answers `/start` and
+`/ping` and writes heartbeats; reminders are Phase 2. The source of truth for scope, data model, and phases is
 `docs/PLAN.md`. `docs/REFERENCES.md` holds competitors, OSS, and vet-care frequency sources.
 `docs/HOSTING_RU.md` holds the Russia-specific hosting analysis. `docs/DEPLOY_AMVERA.md` is the
 chosen deployment (Amvera, Moscow region). `docs/DEPLOY_YC.md` is a rejected Yandex Cloud option,
@@ -62,6 +63,18 @@ pnpm-workspaces monorepo:
   household members see who did it (prevents double feeding).
 - `pocketbase/`: PocketBase backend (auth, SQLite, realtime, files). Schema lives in
   `pb_migrations` and access control in API rules. Every record is scoped to the user's `household`.
+  Users can't set `household`/`role` through the API; membership changes go through the custom
+  routes in `pb_hooks/household.pb.js` (`POST /api/cathub/household`, `/join`, `/invite`). Hooks run
+  each handler in its own JS VM, so shared helpers live in `pb_hooks/lib/*.js` and are `require()`d
+  inside handlers.
+
+Web app notes (`apps/web/src`): routing is `wouter` (`App.tsx`), data is TanStack Query
+(`lib/queries.ts`) invalidated by PocketBase realtime subscriptions (`useRealtimeSync`), and
+`lib/board.ts` runs every task through `evaluate()` from core. `pb.authStore.record` returns a new
+object on every access, so `lib/auth.ts` keeps a cached snapshot for `useSyncExternalStore`.
+PocketBase dates use a space (`2026-09-25 08:12:00.000Z`); convert with `toIso`/`toPbDate` from
+`lib/pb.ts`. Access rules read `@request.auth.household` from the database, so the client only
+needs `refreshAuth()` to update its own view of the user.
 
 Deployment (docs/DEPLOY_AMVERA.md): **one Amvera project, one container.** The root `Dockerfile`
 builds web + bot, and `deploy/entrypoint.sh` runs `pocketbase serve --http=0.0.0.0:8090

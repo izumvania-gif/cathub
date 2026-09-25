@@ -1,6 +1,6 @@
 import type { RecordModel } from 'pocketbase';
 import { useEffect, useState } from 'react';
-import { pb } from '../pb';
+import { pb } from '../lib/pb';
 
 type Heartbeat = RecordModel & {
   telegram_ok: boolean;
@@ -71,7 +71,7 @@ export function Diagnostics() {
 
   return (
     <main className="mx-auto max-w-md px-5 py-8">
-      <a href="#/" className="text-muted text-sm">
+      <a href="/" className="text-muted text-sm">
         ← Назад
       </a>
       <h1 className="mt-3 text-2xl font-bold tracking-tight">Диагностика</h1>
