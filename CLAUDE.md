@@ -101,6 +101,12 @@ pnpm-workspaces monorepo:
   never gzip `/api/`, it buffers the realtime SSE stream. `specs/a11y.spec.ts` runs axe on every
   screen in both themes and must stay at zero violations.
 
+Pixel cat (`apps/web/src/cat`): `sprite.ts` rasterizes parametric poses (ellipses, capsule legs,
+Bézier tail) with auto-outline; coat patterns are computed per pixel from `look.ts` (stored in
+`cats.appearance`). `behavior.ts` is a pure mood → behaviour state machine; `CatScene` draws the
+room on a canvas (~12 fps, paused off screen, still pose under reduced motion). `/cat-lab` shows
+everything. `cat.test.ts` checks every frame stays inside the sprite frame.
+
 Web app notes (`apps/web/src`): routing is `wouter` (`App.tsx`), data is TanStack Query
 (`lib/queries.ts`) invalidated by PocketBase realtime subscriptions (`useRealtimeSync`), and
 `lib/board.ts` runs every task through `evaluate()` from core. `pb.authStore.record` returns a new

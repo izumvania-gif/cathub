@@ -17,6 +17,7 @@ import { Tasks } from './pages/Tasks';
 import { Today } from './pages/Today';
 
 // Less-used screens load on demand to keep the first load small.
+const CatLab = lazy(() => import('./pages/CatLab').then((m) => ({ default: m.CatLab })));
 const Diagnostics = lazy(() =>
   import('./pages/Diagnostics').then((m) => ({ default: m.Diagnostics })),
 );
@@ -98,6 +99,7 @@ function Routes() {
   return (
     <Switch>
       <Route path="/diag" component={Diagnostics} />
+      <Route path="/cat-lab" component={CatLab} />
       <Route path="/join/:code">{(p) => <JoinLink code={p.code} />}</Route>
       <Route>{!user ? <Login /> : !user.household ? <Onboarding /> : <Shell />}</Route>
     </Switch>
