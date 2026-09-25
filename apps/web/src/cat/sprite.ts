@@ -15,7 +15,8 @@ export const FRAME_FLOOR = 28 + OY;
 
 type P = readonly [number, number];
 
-export type Face = 'open' | 'blink' | 'closed' | 'happy' | 'meow' | 'lick' | 'grumpy' | 'down';
+export type Face =
+  'open' | 'up' | 'blink' | 'closed' | 'happy' | 'meow' | 'lick' | 'grumpy' | 'down';
 
 interface Ellipse {
   x: number;
@@ -26,6 +27,8 @@ interface Ellipse {
   rot?: number;
   /** Where the light fur is: the underside (standing, lying) or the chest (sitting). */
   chest?: boolean;
+  /** Lying on its back: the belly faces up. */
+  upsideDown?: boolean;
 }
 
 interface Leg {
@@ -64,7 +67,16 @@ export type Anim =
   | 'jump'
   | 'happy'
   | 'grumpy'
-  | 'play';
+  | 'play'
+  | 'scratch'
+  | 'bat'
+  | 'knead'
+  | 'belly'
+  | 'pounce'
+  | 'leapUp'
+  | 'leapDown'
+  | 'watch'
+  | 'sniff';
 
 export const ANIMS: Record<Anim, { frames: number; fps: number; label: string }> = {
   walk: { frames: 8, fps: 10, label: 'Идёт' },
@@ -80,6 +92,15 @@ export const ANIMS: Record<Anim, { frames: number; fps: number; label: string }>
   happy: { frames: 12, fps: 6, label: 'Мурчит' },
   grumpy: { frames: 12, fps: 8, label: 'Недоволен' },
   play: { frames: 8, fps: 8, label: 'Играет' },
+  scratch: { frames: 6, fps: 8, label: 'Точит когти' },
+  bat: { frames: 8, fps: 10, label: 'Бьёт лапкой' },
+  knead: { frames: 8, fps: 5, label: 'Мнёт лапками' },
+  belly: { frames: 12, fps: 6, label: 'Валяется' },
+  pounce: { frames: 8, fps: 12, label: 'Готовится прыгнуть' },
+  leapUp: { frames: 2, fps: 6, label: 'Запрыгивает' },
+  leapDown: { frames: 2, fps: 6, label: 'Спрыгивает' },
+  watch: { frames: 24, fps: 6, label: 'Наблюдает' },
+  sniff: { frames: 8, fps: 6, label: 'Нюхает' },
 };
 
 const TAU = Math.PI * 2;
@@ -293,6 +314,138 @@ export function poseAt(anim: Anim, i: number): Pose {
       p.tailFront = false;
       return p;
     }
+    case 'scratch': {
+      // Up on the hind legs, front paws on a post to the right, pulling down in turns.
+      const k = Math.sin(f);
+      return {
+        body: { x: 19.2, y: 17.6, rx: 4.8, ry: 7.6, rot: -0.3, chest: true },
+        haunch: { x: 16.4, y: 24.2, rx: 4.4, ry: 3.4 },
+        head: { x: 23.4, y: 9.4 },
+        face: i % n < 2 ? 'closed' : 'open',
+        ears: 'up',
+        legs: [
+          { a: [22.4, 13.5], b: [28.4, 13.5 - k * 1.8], far: true },
+          { a: [21.6, 14], b: [28, 15.5 + k * 1.8] },
+        ],
+        tucked: [[18, 26.9]],
+        tail: [
+          [12.6, 25.4],
+          [7, 27.4],
+          [4.6, 26.5 + k * 0.6],
+          [4, 24 + k],
+        ],
+      };
+    }
+    case 'bat': {
+      const k = Math.sin(f);
+      const p = sitting(t, { face: 'open', tail: 'swish' });
+      p.legs = [
+        { a: [22.2, 19], b: [22.6, GROUND], far: true },
+        { a: [20.6, 17.5], b: [26.4 + k * 1.6, 14.5 - Math.max(0, k) * 2.5], top: true },
+      ];
+      return p;
+    }
+    case 'knead': {
+      const p = lying(0, { asleep: false });
+      const up = i % 2;
+      p.face = 'happy';
+      p.tucked = [
+        [27.4, 26.6 - up * 0.9],
+        [30.4, 26.6 - (1 - up) * 0.9],
+      ];
+      return p;
+    }
+    case 'belly': {
+      const k = Math.sin(f) * 0.8;
+      return {
+        body: { x: 18, y: 24.2, rx: 9, ry: 4.2, upsideDown: true },
+        head: { x: 27.6, y: 22.6 },
+        face: 'happy',
+        ears: 'up',
+        legs: [
+          { a: [15, 22], b: [15.5 - k, 17.2], far: true },
+          { a: [23.5, 22], b: [24.5 + k, 17], far: true },
+          { a: [13, 22.4], b: [12 + k, 17.6] },
+          { a: [21.5, 22.4], b: [20.8 - k, 17.2] },
+        ],
+        tail: [
+          [9.6, 25],
+          [5.6, 27.4],
+          [4, 26 + k],
+          [4.4, 23 + k],
+        ],
+      };
+    }
+    case 'pounce': {
+      // Crouched low, rear end wiggling, tail tip twitching.
+      const w = Math.sin(f * 2) * 0.5;
+      return {
+        body: { x: 17 + w, y: 22.4, rx: 8.6, ry: 3.8, rot: 0.1 },
+        head: { x: 28, y: 18.4 },
+        face: 'open',
+        ears: 'up',
+        legs: [
+          { a: [13.6 + w, 23.5], b: [13 + w, GROUND], far: true },
+          { a: [23.6, 24], b: [25, GROUND], far: true },
+          { a: [12 + w, 24], b: [11.4 + w, GROUND] },
+          { a: [22.4, 24.5], b: [24, GROUND] },
+        ],
+        tail: [
+          [9.4, 21.8],
+          [5.6, 21.6],
+          [4, 22.6 + w * 2],
+          [3.4, 20.6 + w * 3],
+        ],
+      };
+    }
+    case 'leapUp':
+    case 'leapDown': {
+      const up = anim === 'leapUp';
+      const k = i % 2 ? 0.6 : 0;
+      return {
+        body: { x: 17.5, y: 19, rx: 9, ry: 4, rot: up ? -0.32 : 0.3 },
+        head: up ? { x: 27.4, y: 10.6 } : { x: 28.4, y: 17.2 },
+        face: 'open',
+        ears: up ? 'up' : 'flat',
+        legs: up
+          ? [
+              { a: [13.4, 21], b: [8.6 - k, 25.6], far: true },
+              { a: [22.6, 17], b: [27.6, 13 - k], far: true },
+              { a: [12, 21.6], b: [7.2 - k, 26] },
+              { a: [21.4, 17.6], b: [26.6, 14.4 - k] },
+            ]
+          : [
+              { a: [13.4, 17.4], b: [9.4, 15 - k], far: true },
+              { a: [23.4, 22], b: [27.4, 26.4 + k], far: true },
+              { a: [12, 18], b: [8, 16 - k] },
+              { a: [22.2, 22.6], b: [25.6, 26.8 + k] },
+            ],
+        tail: up
+          ? [
+              [9.2, 20.5],
+              [6, 22],
+              [4.4, 23.4],
+              [3, 23.4],
+            ]
+          : [
+              [9.4, 17],
+              [6, 15],
+              [4.6, 12],
+              [4.2, 9.5],
+            ],
+      };
+    }
+    case 'watch': {
+      const p = sitting(t, { face: 'up', tail: 'swish', headDy: -0.4 });
+      if (i % n === 16 || i % n === 17) p.face = 'blink';
+      return p;
+    }
+    case 'sniff': {
+      const p = standing(0, { stride: 0.4, lift: 0 });
+      p.head = { x: 29.8, y: 15.8 + (i % 4 < 2 ? 0 : 0.6) };
+      p.face = i % 4 < 2 ? 'down' : 'blink';
+      return p;
+    }
   }
 }
 
@@ -414,9 +567,20 @@ function rasterize(pose: Pose, look: CatLook): Cell[] {
     c.u = u;
     c.v = v;
   };
-  const each = (fn: (x: number, y: number, p: P) => void) => {
-    for (let y = 0; y < FRAME_H; y++)
-      for (let x = 0; x < FRAME_W; x++) fn(x, y, [x + 0.5, y + 0.5 - OY]);
+  /** Visits pixel centers (in pose coordinates), optionally only within a pose-space box. */
+  const each = (
+    fn: (x: number, y: number, p: P) => void,
+    box?: [number, number, number, number],
+  ) => {
+    const [x0, y0, x1, y1] = box
+      ? [
+          Math.max(0, Math.floor(box[0])),
+          Math.max(0, Math.floor(box[1] + OY)),
+          Math.min(FRAME_W - 1, Math.ceil(box[2])),
+          Math.min(FRAME_H - 1, Math.ceil(box[3] + OY)),
+        ]
+      : [0, 0, FRAME_W - 1, FRAME_H - 1];
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) fn(x, y, [x + 0.5, y + 0.5 - OY]);
   };
   const legR = 1.3;
   const drawLeg = (l: Leg) => {
@@ -433,6 +597,14 @@ function rasterize(pose: Pose, look: CatLook): Cell[] {
     layer++;
     const pts: P[] = [];
     for (let i = 0; i <= 40; i++) pts.push(bezier(pose.tail, i / 40));
+    const xs = pts.map((q) => q[0]);
+    const ys = pts.map((q) => q[1]);
+    const bb: [number, number, number, number] = [
+      Math.min(...xs) - tailR - 1,
+      Math.min(...ys) - tailR - 1,
+      Math.max(...xs) + tailR + 1,
+      Math.max(...ys) + tailR + 1,
+    ];
     each((x, y, p) => {
       let best = { d: Infinity, t: 0 };
       for (let i = 0; i < pts.length - 1; i++) {
@@ -441,7 +613,7 @@ function rasterize(pose: Pose, look: CatLook): Cell[] {
       }
       const r = tailR * (1 - best.t * 0.25);
       if (best.d <= r) put(x, y, Part.Tail, false, best.t, 0);
-    });
+    }, bb);
   };
   const drawEllipse = (e: Ellipse, part: Part, pad = 0) => {
     layer++;
@@ -543,18 +715,23 @@ export function renderFrame(
         const chest = pose.body.chest;
         const belly =
           c.part === Part.Body &&
-          (chest ? c.u > 0.3 && c.v > -0.75 : c.v > 0.42 || (c.u > 0.55 && c.v > -0.35));
+          (pose.body.upsideDown
+            ? c.v < -0.3
+            : chest
+              ? c.u > 0.3 && c.v > -0.75
+              : c.v > 0.42 || (c.u > 0.55 && c.v > -0.35));
         const bicolorBelly =
           pattern === 'bicolor' &&
           c.part === Part.Body &&
-          (chest ? c.u > 0.05 : c.v > 0.1 || c.u > 0.45);
+          (pose.body.upsideDown ? c.v < -0.1 : chest ? c.u > 0.05 : c.v > 0.1 || c.u > 0.45);
         if (bicolorBelly || (belly && pattern !== 'point')) return C.light;
         if (pattern === 'calico') return patch() ?? C.base;
         if (pattern === 'point') return c.v < -0.7 ? shade(C.base, 0.08) : C.base;
         if (tabby) {
-          if (c.v < -0.82) return C.stripe; // dorsal line
-          const k = c.u * 4.6 - c.v * 1.4;
-          if (((k % 3.3) + 3.3) % 3.3 < 1.05 && c.v < 0.35) return C.stripe;
+          const v = pose.body.upsideDown ? -c.v : c.v;
+          if (v < -0.82) return C.stripe; // dorsal line
+          const k = c.u * 4.6 - v * 1.4;
+          if (((k % 3.3) + 3.3) % 3.3 < 1.05 && v < 0.35) return C.stripe;
         }
         return C.base;
       }
@@ -669,6 +846,14 @@ export function renderFrame(
           set(ex + 2, hy - 1, C.white);
           set(ex, hy, iris);
           set(ex + 1, hy, C.pupil);
+          set(ex + 2, hy, iris);
+          break;
+        case 'up':
+          set(ex, hy - 1, iris);
+          set(ex + 1, hy - 1, C.pupil);
+          set(ex + 2, hy - 1, C.white);
+          set(ex, hy, iris);
+          set(ex + 1, hy, iris);
           set(ex + 2, hy, iris);
           break;
         case 'down':

@@ -1,8 +1,9 @@
+import type { Layout, Spot, SpotKind } from './room';
 import { ANIMS, type Anim } from './sprite';
 
 /**
- * How the cat feels, derived from the chores (see catMood) — it only picks behaviours; it never
- * blocks anything. Kept pure so it can be unit-tested and replayed with a seeded random.
+ * How the cat feels, derived from the chores (see catMood). It only picks behaviours. Pure and
+ * driven by an injectable random so it can be unit-tested and replayed.
  */
 export type Mood = 'fed' | 'hungry' | 'grumpy' | 'restless' | 'sleepy' | 'happy' | 'calm';
 
@@ -16,30 +17,34 @@ export const MOOD_LABELS: Record<Mood, string> = {
   calm: 'гуляет',
 };
 
-export interface Scene {
-  /** Width of the room in sprite pixels. */
-  width: number;
-  /** Left edge of the cat frame when eating from the bowl. */
-  bowlX: number;
-  /** Left edge of the cat frame when sleeping in its spot. */
-  bedX: number;
-}
+type Step =
+  | { k: 'walk'; x: number; run?: boolean }
+  | { k: 'leap'; x: number; y: number }
+  | { k: 'act'; anim: Anim; dur: number; dir?: 1 | -1; spot?: Spot; hidden?: boolean };
 
 export interface CatState {
   x: number;
+  /** Height above the floor (on a sill, on the cat tree). */
+  y: number;
   dir: 1 | -1;
   act: Anim;
-  /** Seconds spent in the current act. */
+  /** Seconds into the current step. */
   t: number;
   dur: number;
-  targetX: number | null;
+  /** The step being done now, and what comes after it. */
+  cur: Step | null;
+  plan: Step[];
+  /** Where the leap started. */
+  from: { x: number; y: number } | null;
+  spot: Spot | null;
+  hidden: boolean;
+  bubble: string | null;
   /** Ate once in this "fed" mood, so it moves on to grooming and resting. */
   ate: boolean;
-  bubble: string | null;
+  ball: { x: number; v: number };
+  /** Spring mouse wobble 0…1 after being batted. */
+  wobble: number;
 }
-
-export const MOVING: ReadonlySet<Anim> = new Set(['walk', 'run']);
-const SPEED: Partial<Record<Anim, number>> = { walk: 9, run: 24 };
 
 export const BUBBLES: Partial<Record<Anim, string>> = {
   meow: 'мяу?',
@@ -47,158 +52,325 @@ export const BUBBLES: Partial<Record<Anim, string>> = {
   sleep: 'z z',
   happy: '♥',
   eat: 'ням',
+  knead: '♥',
+  belly: '♥',
+  watch: '!',
 };
 
-export function initialState(scene: Scene, rand = Math.random): CatState {
+const SPEED = { walk: 10, run: 26 };
+const LEAP_TIME = 0.55;
+const MAX = (l: Layout) => Math.max(0, l.width - 40);
+
+export function initialState(l: Layout, rand = Math.random): CatState {
   return {
-    x: Math.round(rand() * (scene.width - 40)),
+    x: Math.round(rand() * MAX(l)),
+    y: 0,
     dir: rand() < 0.5 ? 1 : -1,
     act: 'sit',
     t: 0,
     dur: 1,
-    targetX: null,
-    ate: false,
+    cur: null,
+    plan: [],
+    from: null,
+    spot: null,
+    hidden: false,
     bubble: null,
+    ate: false,
+    ball: { x: Math.round(l.width * 0.42), v: 0 },
+    wobble: 0,
   };
 }
 
-type Choice = [weight: number, anim: Anim, dur: [number, number]];
+function range(rand: () => number, a: number, b: number) {
+  return a + rand() * (b - a);
+}
 
-function pick(choices: Choice[], rand: () => number) {
+function pickWeighted<T>(choices: [number, T][], rand: () => number): T {
   const total = choices.reduce((s, c) => s + c[0], 0);
   let r = rand() * total;
   for (const c of choices) {
     r -= c[0];
-    if (r <= 0) return c;
+    if (r <= 0) return c[1];
   }
-  return choices[choices.length - 1]!;
+  return choices[choices.length - 1]![1];
 }
 
-function goTo(s: CatState, x: number, anim: Anim = 'walk'): CatState {
-  return { ...s, act: anim, t: 0, dur: 30, targetX: x, dir: x >= s.x ? 1 : -1, bubble: null };
+const DURATION: Partial<Record<Anim, [number, number]>> = {
+  sit: [2, 4],
+  meow: [2.5, 4],
+  groom: [3, 5],
+  eat: [7, 9],
+  sleep: [15, 30],
+  loaf: [5, 9],
+  stretch: [2, 2],
+  jump: [1, 1],
+  happy: [3, 5],
+  grumpy: [4, 6],
+  play: [2.5, 3.5],
+  scratch: [2.5, 4],
+  bat: [2, 3.5],
+  knead: [3, 5],
+  belly: [3, 5],
+  pounce: [0.9, 1.4],
+  watch: [4, 8],
+  sniff: [1.5, 2.5],
+};
+
+function act(anim: Anim, rand: () => number, extra: Partial<Step & { k: 'act' }> = {}): Step {
+  const [a, b] = DURATION[anim] ?? [2, 3];
+  return { k: 'act', anim, dur: range(rand, a, b), ...extra };
 }
 
-function doing(s: CatState, anim: Anim, [a, b]: [number, number], rand: () => number): CatState {
-  return {
-    ...s,
-    act: anim,
-    t: 0,
-    dur: a + rand() * (b - a),
-    targetX: null,
-    bubble: BUBBLES[anim] ?? null,
+/** Steps to get from where the cat is to (x, y), leaping up or down as needed. */
+function route(s: CatState, l: Layout, x: number, y: number, leapIn = false, run = false): Step[] {
+  const steps: Step[] = [];
+  let cx = s.x;
+  if (s.y === y && Math.abs(cx - x) < 2 && (y > 0 || !leapIn || s.spot)) return steps; // already there
+  if (s.y > 0) {
+    // Jump down beside the perch first.
+    const side = x >= cx ? 1 : -1;
+    const land = Math.max(0, Math.min(MAX(l), cx + side * 12));
+    steps.push({ k: 'leap', x: land, y: 0 });
+    cx = land;
+  }
+  if (y > 0 || leapIn) {
+    // Walk to a take-off point next to the target, then leap.
+    const side = cx <= x ? -1 : 1;
+    const takeoff = Math.max(0, Math.min(MAX(l), x + side * 14));
+    if (Math.abs(takeoff - cx) >= 1) steps.push({ k: 'walk', x: takeoff, run });
+    steps.push({ k: 'leap', x, y });
+  } else if (Math.abs(x - cx) >= 1) {
+    steps.push({ k: 'walk', x, run });
+  }
+  return steps;
+}
+
+function spotPlan(s: CatState, l: Layout, spot: Spot, rand: () => number, anim?: Anim): Step[] {
+  const x = spot.kind === 'ball' ? Math.max(0, Math.min(MAX(l), s.ball.x - 33)) : spot.x;
+  const steps = route(s, l, x, spot.y, spot.leap);
+  if (spot.kind === 'ball') {
+    return [...steps, act('pounce', rand, { dir: 1 }), act('play', rand, { dir: 1, spot })];
+  }
+  if (spot.kind === 'hide')
+    return [
+      ...steps,
+      act('sit', rand, { dir: spot.dir, spot, hidden: true, dur: range(rand, 4, 8) }),
+    ];
+  const a = anim ?? spot.acts[Math.floor(rand() * spot.acts.length)]!;
+  return [...steps, act(a, rand, { dir: spot.dir, spot })];
+}
+
+function wander(s: CatState, l: Layout, rand: () => number, run = false): Step[] {
+  let x = Math.round(rand() * MAX(l));
+  if (Math.abs(x - s.x) < 14)
+    x = s.x < MAX(l) / 2 ? Math.min(MAX(l), s.x + 24) : Math.max(0, s.x - 24);
+  return route(s, l, x, 0, false, run);
+}
+
+/** What to do next, given the mood and the room. */
+export function plan(s: CatState, mood: Mood, l: Layout, rand = Math.random): Step[] {
+  const spots = (k: SpotKind | SpotKind[]) =>
+    l.spots.filter((p) => (Array.isArray(k) ? k : [k]).includes(p.kind));
+  const any = (k: SpotKind | SpotKind[]) => {
+    const xs = spots(k);
+    return xs.length ? xs[Math.floor(rand() * xs.length)]! : null;
   };
-}
+  const here = (anim: Anim) => [act(anim, rand)];
 
-function wander(s: CatState, scene: Scene, rand: () => number, anim: Anim = 'walk') {
-  const max = Math.max(0, scene.width - 40);
-  // Pick somewhere at least a few steps away so walks don't look like twitches.
-  let x = Math.round(rand() * max);
-  if (Math.abs(x - s.x) < 12) x = s.x < max / 2 ? Math.min(max, s.x + 20) : Math.max(0, s.x - 20);
-  return goTo(s, x, anim);
-}
-
-/** What to do next, given the mood. */
-export function nextAct(s: CatState, mood: Mood, scene: Scene, rand = Math.random): CatState {
-  const near = (x: number) => Math.abs(s.x - x) < 2;
   switch (mood) {
     case 'hungry':
-      if (!near(scene.bowlX)) return goTo(s, scene.bowlX);
-      return doing(
-        { ...s, dir: 1 },
-        pick(
-          [
-            [3, 'meow', [2.5, 4]],
-            [2, 'sit', [2, 3]],
-          ],
-          rand,
-        )[1],
-        [2.5, 4],
-        rand,
-      );
+      if (Math.abs(s.x - l.bowlX) >= 2 || s.y > 0) return route(s, l, l.bowlX, 0);
+      return [act(rand() < 0.6 ? 'meow' : 'sit', rand, { dir: 1 })];
     case 'fed':
       if (!s.ate) {
-        if (!near(scene.bowlX)) return goTo(s, scene.bowlX, 'run');
-        return { ...doing({ ...s, dir: 1 }, 'eat', [7, 9], rand), ate: true };
+        if (Math.abs(s.x - l.bowlX) >= 2 || s.y > 0) return route(s, l, l.bowlX, 0, false, true);
+        return [act('eat', rand, { dir: 1 })];
       }
-      return doing(s, s.act === 'eat' ? 'groom' : 'loaf', [5, 8], rand);
-    case 'grumpy': {
-      const c = pick(
-        [
-          [4, 'grumpy', [4, 6]],
-          [2, 'walk', [0, 0]],
-          [1, 'sit', [2, 3]],
-        ],
-        rand,
-      );
-      return c[1] === 'walk' ? wander(s, scene, rand) : doing(s, c[1], c[2], rand);
+      return s.act === 'eat' ? here('groom') : spotOr(['bed', 'rug'], 'loaf');
+    case 'sleepy': {
+      const bed = any('bed') ?? any('perch') ?? any('box');
+      if (bed) return spotPlan(s, l, bed, rand, bed.acts.includes('sleep') ? 'sleep' : 'loaf');
+      if (Math.abs(s.x - l.napX) >= 2 || s.y > 0) return route(s, l, l.napX, 0);
+      return here('sleep');
     }
-    case 'restless': {
-      const c = pick(
+    case 'grumpy':
+      return pickWeighted<() => Step[]>(
         [
-          [5, 'walk', [0, 0]],
-          [2, 'run', [0, 0]],
-          [2, 'meow', [1.5, 2.5]],
-          [1, 'sit', [1, 2]],
+          [4, () => here('grumpy')],
+          [
+            spots(['hide', 'box']).length ? 3 : 0,
+            () => spotPlan(s, l, any(['hide', 'box'])!, rand),
+          ],
+          [spots('perch').length ? 2 : 0, () => spotPlan(s, l, any('perch')!, rand, 'loaf')],
+          [2, () => wander(s, l, rand)],
         ],
         rand,
-      );
-      return MOVING.has(c[1]) ? wander(s, scene, rand, c[1]) : doing(s, c[1], c[2], rand);
-    }
-    case 'sleepy':
-      if (!near(scene.bedX)) return goTo(s, scene.bedX);
-      return doing(s, 'sleep', [20, 40], rand);
-    case 'happy': {
-      const c = pick(
+      )();
+    case 'restless':
+      return pickWeighted<() => Step[]>(
         [
-          [3, 'play', [3, 5]],
-          [3, 'happy', [3, 5]],
-          [2, 'walk', [0, 0]],
-          [1, 'jump', [1, 1]],
-          [1, 'loaf', [4, 6]],
+          [4, () => wander(s, l, rand, rand() < 0.4)],
+          [spots('perch').length ? 2 : 0, () => spotPlan(s, l, any('perch')!, rand, 'watch')],
+          [spots('scratch').length ? 2 : 0, () => spotPlan(s, l, any('scratch')!, rand)],
+          [1, () => here('meow')],
         ],
         rand,
-      );
-      return c[1] === 'walk' ? wander(s, scene, rand) : doing(s, c[1], c[2], rand);
-    }
-    case 'calm': {
-      const c = pick(
+      )();
+    case 'happy':
+      return pickWeighted<() => Step[]>(
         [
-          [5, 'walk', [0, 0]],
-          [2, 'sit', [3, 5]],
-          [2, 'loaf', [5, 8]],
-          [2, 'groom', [3, 4]],
-          [1, 'stretch', [2, 2]],
-          [1, 'sleep', [6, 10]],
+          [
+            spots(['ball', 'bat']).length ? 4 : 0,
+            () => spotPlan(s, l, any(['ball', 'bat'])!, rand),
+          ],
+          [
+            spots('rug').length ? 2 : 0,
+            () => spotPlan(s, l, any('rug')!, rand, rand() < 0.5 ? 'belly' : 'knead'),
+          ],
+          [
+            spots(['perch', 'box', 'watch']).length ? 2 : 0,
+            () => spotPlan(s, l, any(['perch', 'box', 'watch'])!, rand),
+          ],
+          [2, () => (s.y > 0 ? wander(s, l, rand) : here('happy'))],
+          [2, () => wander(s, l, rand, rand() < 0.3)],
+          [1, () => (s.y > 0 ? wander(s, l, rand) : here('jump'))],
         ],
         rand,
-      );
-      return c[1] === 'walk' ? wander(s, scene, rand) : doing(s, c[1], c[2], rand);
+      )();
+    case 'calm':
+      return pickWeighted<() => Step[]>(
+        [
+          [4, () => wander(s, l, rand)],
+          [
+            l.spots.length ? 5 : 0,
+            () => spotPlan(s, l, l.spots[Math.floor(rand() * l.spots.length)]!, rand),
+          ],
+          [2, () => here('sit')],
+          [1, () => here('groom')],
+          [1, () => here('stretch')],
+          [1, () => here('loaf')],
+        ],
+        rand,
+      )();
+  }
+
+  function spotOr(kinds: SpotKind[], fallback: Anim): Step[] {
+    const p = any(kinds);
+    return p
+      ? spotPlan(s, l, p, rand, p.acts.includes(fallback) ? fallback : undefined)
+      : here(fallback);
+  }
+}
+
+/** Starts the next step of the plan, making a new plan when it runs out. */
+function begin(s: CatState, mood: Mood, l: Layout, rand: () => number): CatState {
+  let steps = s.plan;
+  if (!steps.length) steps = plan(s, mood, l, rand);
+  if (!steps.length) steps = [act('sit', rand)];
+  const [head, ...rest] = steps;
+  const base = { ...s, cur: head!, plan: rest, t: 0, from: null, bubble: null as string | null };
+  switch (head!.k) {
+    case 'walk':
+      return {
+        ...base,
+        act: head!.run ? 'run' : 'walk',
+        dur: Infinity,
+        dir: head!.x >= s.x ? 1 : -1,
+        spot: null,
+        hidden: false,
+      };
+    case 'leap':
+      return {
+        ...base,
+        act: head!.y > s.y ? 'leapUp' : 'leapDown',
+        dur: LEAP_TIME,
+        dir: head!.x > s.x ? 1 : head!.x < s.x ? -1 : s.dir,
+        from: { x: s.x, y: s.y },
+        spot: null,
+        hidden: false,
+      };
+    case 'act': {
+      const a = head!;
+      return {
+        ...base,
+        act: a.anim,
+        dur: a.dur,
+        dir: a.dir ?? s.dir,
+        spot: a.spot ?? (s.y > 0 ? s.spot : null),
+        hidden: !!a.hidden,
+        bubble: a.hidden ? null : (BUBBLES[a.anim] ?? null),
+        ate: s.ate || a.anim === 'eat',
+      };
     }
   }
 }
 
 /** Advances the simulation by dt seconds. */
-export function step(
-  s: CatState,
-  dt: number,
-  mood: Mood,
-  scene: Scene,
-  rand = Math.random,
-): CatState {
-  const max = Math.max(0, scene.width - 40);
-  if (s.targetX !== null) {
-    const speed = SPEED[s.act] ?? 9;
-    const d = s.targetX - s.x;
-    const move = Math.sign(d) * Math.min(Math.abs(d), speed * dt);
-    const x = Math.max(0, Math.min(max, s.x + move));
-    if (Math.abs(s.targetX - x) < 0.5 || x === 0 || x === max) {
-      return nextAct({ ...s, x: Math.round(x), targetX: null }, mood, scene, rand);
+export function step(s: CatState, dt: number, mood: Mood, l: Layout, rand = Math.random): CatState {
+  // The ball rolls and slows down; the spring mouse settles.
+  let ball = s.ball;
+  if (ball.v) {
+    let x = ball.x + ball.v * dt;
+    let v = ball.v * Math.pow(0.25, dt);
+    if (x < 2 || x > l.width - 10) {
+      x = Math.max(2, Math.min(l.width - 10, x));
+      v = -v * 0.5;
     }
+    ball = { x, v: Math.abs(v) < 2 ? 0 : v };
+  }
+  const wobble = Math.max(0, s.wobble - dt * 0.6);
+  s = { ...s, ball, wobble };
+
+  const head = s.cur;
+  if (head?.k === 'walk') {
+    const speed = head.run ? SPEED.run : SPEED.walk;
+    const d = head.x - s.x;
+    const x = s.x + Math.sign(d) * Math.min(Math.abs(d), speed * dt);
+    if (Math.abs(head.x - x) < 0.5) return begin({ ...s, x: head.x }, mood, l, rand);
     return { ...s, x, t: s.t + dt };
   }
+  if (head?.k === 'leap' && s.from) {
+    const t = s.t + dt;
+    const k = Math.min(1, t / LEAP_TIME);
+    const arc = Math.sin(Math.PI * k) * (6 + Math.abs(head.y - s.from.y) * 0.3);
+    const x = s.from.x + (head.x - s.from.x) * k;
+    const y = s.from.y + (head.y - s.from.y) * k + arc;
+    if (k >= 1) return begin({ ...s, x: head.x, y: head.y }, mood, l, rand);
+    return { ...s, x, y, t };
+  }
   const t = s.t + dt;
-  if (t >= s.dur) return nextAct({ ...s, t }, mood, scene, rand);
+  if (s.act === 'bat' && s.spot?.kind === 'bat') s = { ...s, wobble: 1 };
+  if (t >= s.dur) {
+    let next = { ...s, t };
+    if (s.act === 'play') {
+      // Swat the ball away and go after it next time.
+      const dir = rand() < 0.5 ? -1 : 1;
+      next = { ...next, ball: { x: s.ball.x, v: dir * range(rand, 30, 60) } };
+    }
+    return begin(next, mood, l, rand);
+  }
   return { ...s, t };
+}
+
+/** Interrupts whatever the cat is doing (the mood changed or someone tapped it). */
+export function replan(s: CatState, mood: Mood, l: Layout, rand = Math.random): CatState {
+  // Mid-leap the cat lands first.
+  const landed = s.cur?.k === 'leap' ? { ...s, x: s.cur.x, y: s.cur.y } : s;
+  return begin({ ...landed, plan: [], ate: false }, mood, l, rand);
+}
+
+export function react(s: CatState, rand = Math.random): CatState {
+  const anim: Anim = s.act === 'sleep' ? 'stretch' : rand() < 0.6 ? 'happy' : 'meow';
+  if (s.hidden || s.cur?.k === 'leap') return s;
+  return {
+    ...s,
+    act: anim,
+    t: 0,
+    dur: 2.2,
+    cur: { k: 'act', anim, dur: 2.2 },
+    plan: [],
+    bubble: BUBBLES[anim] ?? null,
+  };
 }
 
 /** The frame to draw for an act at time t (loops; one-shot acts hold their last frame). */

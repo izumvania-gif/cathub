@@ -1,18 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BUBBLES,
   frameAt,
   initialState,
   MOOD_LABELS,
-  nextAct,
+  react,
+  replan,
   STILL,
   step,
   type CatState,
   type Mood,
-  type Scene,
 } from './behavior';
 import { framesFor } from './frames';
 import type { CatLook } from './look';
+import {
+  drawBackground,
+  drawBowlFood,
+  drawFront,
+  drawItems,
+  FLOOR_Y,
+  layout,
+  ROOM_H,
+  type ItemKey,
+  type World,
+} from './room';
 import { ANIMS, FRAME_FLOOR, FRAME_H, FRAME_W, type Anim } from './sprite';
 
 function prefersReducedMotion() {
@@ -76,123 +86,108 @@ export function CatSprite({
   );
 }
 
-const ROOM_H = 38;
-const FLOOR_Y = 33;
-
-function drawBowl(ctx: CanvasRenderingContext2D, x: number, level: number) {
-  // 12×5 bowl, seen from the side, with food heaped by level.
-  const y = FLOOR_Y - 5;
-  ctx.fillStyle = '#2b2d5c';
-  ctx.fillRect(x + 1, y + 1, 10, 4);
-  ctx.fillRect(x, y + 1, 12, 1);
-  ctx.fillStyle = '#4a4fc4';
-  ctx.fillRect(x + 2, y + 2, 8, 2);
-  if (level > 0.05) {
-    ctx.fillStyle = '#f5b62e';
-    const h = level > 0.6 ? 2 : 1;
-    ctx.fillRect(x + 2, y + 1 - h, 8, h);
-    ctx.fillStyle = '#c98a14';
-    ctx.fillRect(x + 4, y + 1 - h, 1, 1);
-    ctx.fillRect(x + 7, y + 1 - h, 1, 1);
-  }
-}
-
-function drawBall(ctx: CanvasRenderingContext2D, x: number) {
-  ctx.fillStyle = '#e2563a';
-  ctx.fillRect(x, FLOOR_Y - 3, 3, 3);
-  ctx.fillRect(x - 1, FLOOR_Y - 2, 5, 1);
-  ctx.fillStyle = '#f2a58f';
-  ctx.fillRect(x + 1, FLOOR_Y - 3, 1, 1);
+/** Room width in sprite pixels: at least ~170 so everything fits, scaled by whole pixels. */
+function fit(clientWidth: number) {
+  const scale = Math.max(2, Math.floor(clientWidth / 170));
+  return { scale, width: Math.floor(clientWidth / scale) };
 }
 
 /**
- * The cat's room: a strip with a floor and a bowl, the cat walking about and behaving by mood.
+ * The cat's room: wall, window, floor, bought items and the cat moving about by mood.
  * Pauses when hidden or off screen; with reduced motion it shows one still pose.
  */
 export function CatScene({
   look,
   mood,
   name,
+  items,
   bowlLevel = 0,
-  scale = 3,
+  night = false,
   onTap,
 }: {
   look: CatLook;
   mood: Mood;
   name: string;
+  items: readonly ItemKey[];
   bowlLevel?: number;
-  scale?: number;
+  night?: boolean;
   onTap?: () => void;
 }) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const bubble = useRef<HTMLSpanElement>(null);
-  const [width, setWidth] = useState(0);
+  const [size, setSize] = useState({ scale: 2, width: 0 });
   const state = useRef<CatState | null>(null);
   const moodRef = useRef(mood);
-
-  const scene: Scene | null = useMemo(
+  const itemsKey = items.join(',');
+  const room = useMemo(
     () =>
-      width ? { width, bowlX: Math.max(0, width - 14 - 36), bedX: Math.min(4, width - 40) } : null,
-    [width],
+      size.width ? layout(size.width, itemsKey ? (itemsKey.split(',') as ItemKey[]) : []) : null,
+    [size.width, itemsKey],
   );
 
-  // Room width follows the container, in whole sprite pixels.
   useEffect(() => {
     const el = wrap.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setWidth(Math.floor(el.clientWidth / scale)));
+    const ro = new ResizeObserver(() => setSize(fit(el.clientWidth)));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [scale]);
+  }, []);
 
-  // A mood change interrupts whatever the cat was doing.
+  // A mood change (or a new room) interrupts whatever the cat was doing.
   useEffect(() => {
     moodRef.current = mood;
-    if (state.current && scene)
-      state.current = nextAct({ ...state.current, ate: false }, mood, scene);
-  }, [mood, scene]);
+    if (state.current && room) state.current = replan(state.current, mood, room);
+  }, [mood, room]);
 
   useEffect(() => {
     const c = canvas.current;
-    if (!c || !scene) return;
+    if (!c || !room) return;
     const ctx = c.getContext('2d')!;
     const still = prefersReducedMotion();
-    if (!state.current) state.current = initialState(scene);
+    if (!state.current) state.current = replan(initialState(room), moodRef.current, room);
+    const start = performance.now();
 
     const render = () => {
       const s = state.current!;
-      ctx.clearRect(0, 0, scene.width, ROOM_H);
-      ctx.fillStyle = 'rgba(35,38,79,0.08)';
-      ctx.fillRect(0, FLOOR_Y, scene.width, ROOM_H - FLOOR_Y);
-      drawBowl(ctx, scene.bowlX + 36, bowlLevel);
-      const act = s.act;
-      const frames = framesFor(look, act);
-      const f = still ? 0 : frameAt(act, s.t);
+      const world: World = {
+        night,
+        time: still ? 0 : (performance.now() - start) / 1000,
+        ballX: s.ball.x,
+        wobble: s.wobble,
+        catInside: s.spot?.inside || s.hidden ? s.spot!.kind : null,
+        hiddenBlink: Math.floor(((performance.now() - start) / 1000) * 2) % 7 === 0,
+      };
+      drawBackground(ctx, room, world);
+      drawItems(ctx, room, world);
+      drawBowlFood(ctx, room, bowlLevel);
       const x = Math.round(s.x);
-      if (act === 'play') drawBall(ctx, s.dir > 0 ? x + 36 : x + 1);
-      ctx.save();
-      if (s.dir < 0) {
-        ctx.translate(x + FRAME_W, 0);
-        ctx.scale(-1, 1);
-      } else ctx.translate(x, 0);
-      ctx.drawImage(frames[f % frames.length]!, 0, FLOOR_Y - FRAME_FLOOR);
-      ctx.restore();
+      const y = Math.round(s.y);
+      if (!s.hidden) {
+        const frames = framesFor(look, s.act);
+        const f = still ? 0 : frameAt(s.act, s.t);
+        ctx.save();
+        if (s.dir < 0) {
+          ctx.translate(x + FRAME_W, 0);
+          ctx.scale(-1, 1);
+        } else ctx.translate(x, 0);
+        ctx.drawImage(frames[f % frames.length]!, 0, FLOOR_Y - FRAME_FLOOR - y);
+        ctx.restore();
+      }
+      drawFront(ctx, room, world);
       const b = bubble.current;
       if (b) {
-        const text = s.bubble;
+        const text = s.hidden ? null : s.bubble;
         b.textContent = text ?? '';
         b.style.opacity = text ? '1' : '0';
-        b.style.transform = `translateX(${(x + (s.dir > 0 ? 26 : 2)) * scale}px)`;
+        const bx = (x + (s.dir > 0 ? 24 : 4)) * size.scale;
+        const by = (FLOOR_Y - FRAME_FLOOR - y + 2) * size.scale - 20;
+        b.style.transform = `translate(${bx}px, ${Math.max(0, by)}px)`;
       }
     };
 
     if (still) {
-      state.current = {
-        ...state.current,
-        act: STILL[moodRef.current],
-        x: Math.round((scene.width - 40) / 2),
-      };
+      state.current = { ...state.current, act: STILL[moodRef.current], hidden: false };
       render();
       return;
     }
@@ -206,8 +201,8 @@ export function CatScene({
       const dt = Math.min(0.25, (now - last) / 1000);
       last = now;
       acc += dt;
-      if (acc < 1 / 12 || !visible || document.hidden) return; // ~12 fps is plenty for pixel art
-      state.current = step(state.current!, acc, moodRef.current, scene);
+      if (acc < 1 / 12 || !visible || document.hidden) return; // ~12 fps suits pixel art
+      state.current = step(state.current!, acc, moodRef.current, room);
       acc = 0;
       render();
     };
@@ -219,32 +214,21 @@ export function CatScene({
       cancelAnimationFrame(raf);
       io.disconnect();
     };
-  }, [scene, look, bowlLevel, scale]);
+  }, [room, look, bowlLevel, night, size.scale]);
 
   const tap = () => {
     onTap?.();
     if (!state.current || prefersReducedMotion()) return;
-    const s = state.current;
-    const reaction: Anim = s.act === 'sleep' ? 'stretch' : Math.random() < 0.6 ? 'happy' : 'meow';
-    state.current = {
-      ...s,
-      act: reaction,
-      t: 0,
-      dur: 2.2,
-      targetX: null,
-      bubble: BUBBLES[reaction] ?? null,
-    };
+    state.current = react(state.current);
     navigator.vibrate?.(15);
   };
 
   return (
-    <div ref={wrap} className="relative w-full select-none" style={{ height: ROOM_H * scale }}>
-      <span
-        ref={bubble}
-        aria-hidden
-        className="bg-card text-ink pointer-events-none absolute top-0 left-0 rounded-full px-2 py-0.5 text-xs font-semibold shadow-sm transition-opacity"
-        style={{ opacity: 0 }}
-      />
+    <div
+      ref={wrap}
+      className="relative w-full overflow-hidden select-none"
+      style={{ height: ROOM_H * size.scale }}
+    >
       <button
         type="button"
         onClick={tap}
@@ -252,19 +236,26 @@ export function CatScene({
         aria-label={`${name}: ${MOOD_LABELS[mood]}. Погладить`}
         data-mood={mood}
       >
-        {scene ? (
+        {room ? (
           <canvas
             ref={canvas}
-            width={scene.width}
+            width={room.width}
             height={ROOM_H}
+            className="mx-auto"
             style={{
-              width: scene.width * scale,
-              height: ROOM_H * scale,
+              width: room.width * size.scale,
+              height: ROOM_H * size.scale,
               imageRendering: 'pixelated',
             }}
           />
         ) : null}
       </button>
+      <span
+        ref={bubble}
+        aria-hidden
+        className="bg-card text-ink pointer-events-none absolute top-0 left-0 rounded-full px-2 py-0.5 text-xs font-semibold shadow-sm transition-opacity"
+        style={{ opacity: 0 }}
+      />
     </div>
   );
 }

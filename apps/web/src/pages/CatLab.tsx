@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { MOOD_LABELS, type Mood } from '../cat/behavior';
 import { CatScene, CatSprite } from '../cat/CatScene';
 import { ACCESSORIES, COATS, EYES, PATTERNS, PRESETS, randomLook, type CatLook } from '../cat/look';
+import { ITEMS, type ItemKey } from '../cat/room';
 import { ANIMS, type Anim } from '../cat/sprite';
 
 /**
@@ -12,6 +13,8 @@ export function CatLab() {
   const [look, setLook] = useState<CatLook>(PRESETS[0]!.look);
   const [mood, setMood] = useState<Mood>('calm');
   const [bowl, setBowl] = useState(0.8);
+  const [items, setItems] = useState<ItemKey[]>(Object.keys(ITEMS) as ItemKey[]);
+  const [night, setNight] = useState(false);
   const set = <K extends keyof CatLook>(k: K, v: CatLook[K]) => setLook((l) => ({ ...l, [k]: v }));
 
   return (
@@ -19,9 +22,47 @@ export function CatLab() {
       <h1 className="font-display text-2xl font-bold">Кот-лаборатория</h1>
       <p className="text-ink-soft mt-1 text-sm">Как выглядит и ведёт себя пиксельный кот</p>
 
-      <section className="bg-card mt-5 overflow-hidden rounded-3xl pt-4">
-        <CatScene look={look} mood={mood} name="Кузя" bowlLevel={bowl} />
+      <section className="mt-5 overflow-hidden rounded-3xl">
+        <CatScene
+          look={look}
+          mood={mood}
+          name="Кузя"
+          bowlLevel={bowl}
+          items={items}
+          night={night}
+        />
       </section>
+
+      <fieldset className="mt-4">
+        <legend className="text-ink-soft mb-2 text-sm font-medium">
+          Комната <span className="font-normal">(в приложении — покупки за 🐟)</span>
+        </legend>
+        <div className="flex flex-wrap gap-2">
+          {(Object.keys(ITEMS) as ItemKey[]).map((k) => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={items.includes(k)}
+              title={ITEMS[k].does}
+              onClick={() =>
+                setItems((xs) => (xs.includes(k) ? xs.filter((x) => x !== k) : [...xs, k]))
+              }
+              className="bg-card aria-pressed:bg-ink aria-pressed:text-paper rounded-full px-3 py-1.5 text-sm"
+            >
+              {ITEMS[k].label}
+              {ITEMS[k].price ? ` · ${ITEMS[k].price} 🐟` : ''}
+            </button>
+          ))}
+          <button
+            type="button"
+            aria-pressed={night}
+            onClick={() => setNight((n) => !n)}
+            className="bg-card aria-pressed:bg-ink aria-pressed:text-paper rounded-full px-3 py-1.5 text-sm"
+          >
+            🌙 Вечер
+          </button>
+        </div>
+      </fieldset>
 
       <fieldset className="mt-4">
         <legend className="text-ink-soft mb-2 text-sm font-medium">Настроение</legend>
