@@ -1,11 +1,18 @@
 import { CATEGORY_LABELS, describeDue, describeSchedule, type TaskCategory } from '@cathub/core';
 import { Plus } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'wouter';
+import { AddSupplySheet, SupplyRow, SupplySheet } from '../components/Supplies';
+import { useSupplyForecasts } from '../lib/supplies';
 import { Empty, PageHeader } from '../components/ui';
 import { useBoard } from '../lib/board';
 
 export function Tasks() {
   const { items, now, tz, isLoading } = useBoard();
+  const supplies = useSupplyForecasts();
+  const [adding, setAdding] = useState(false);
+  const [openSupply, setOpenSupply] = useState<string | null>(null);
+  const selected = supplies.list.find((x) => x.supply.id === openSupply) ?? null;
   const byCategory = new Map<TaskCategory, typeof items>();
   for (const i of [...items].sort((a, b) => a.task.sort - b.task.sort)) {
     const list = byCategory.get(i.task.category) ?? [];
@@ -24,6 +31,42 @@ export function Tasks() {
             <Plus className="size-4" strokeWidth={3} /> Новое
           </Link>
         }
+      />
+      <section className="mb-6">
+        <div className="mb-2 flex items-baseline justify-between px-1">
+          <h2 className="text-ink-soft text-sm font-semibold">Запасы</h2>
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="text-ink-soft text-sm underline underline-offset-4"
+          >
+            Добавить
+          </button>
+        </div>
+        {supplies.list.length ? (
+          <ul className="bg-card divide-line divide-y rounded-3xl">
+            {supplies.list.map(({ supply, f }) => (
+              <li key={supply.id}>
+                <SupplyRow supply={supply} f={f} onOpen={() => setOpenSupply(supply.id)} />
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="bg-card text-ink-soft w-full rounded-3xl p-4 text-left text-sm"
+          >
+            Следите за кормом и наполнителем: приложение посчитает, на сколько дней хватит, и
+            напомнит купить заранее.
+          </button>
+        )}
+      </section>
+      <AddSupplySheet open={adding} onClose={() => setAdding(false)} />
+      <SupplySheet
+        supply={selected?.supply ?? null}
+        f={selected?.f ?? null}
+        onClose={() => setOpenSupply(null)}
       />
       {!isLoading && items.length === 0 ? (
         <Empty title="Дел пока нет">Нажмите «Новое», чтобы добавить.</Empty>

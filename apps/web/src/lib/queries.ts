@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { pb, toIso } from './pb';
-import type { Cat, Completion, HealthRecord, Household, Snooze, Task, User } from './types';
+import type { Cat, Completion, HealthRecord, Household, Snooze, Supply, Task, User } from './types';
 import { useUser } from './auth';
 
 export const keys = {
@@ -13,6 +13,7 @@ export const keys = {
   snoozes: ['snoozes'] as const,
   health: ['health'] as const,
   measurements: ['measurements'] as const,
+  supplies: ['supplies'] as const,
 };
 
 /** Journal / slot coverage window. Latest completion per task is fetched separately. */
@@ -140,6 +141,19 @@ export function useMeasurements(taskId: string | undefined) {
   });
 }
 
+export function useSupplies() {
+  const user = useUser();
+  return useQuery({
+    queryKey: [...keys.supplies, user?.household],
+    enabled: Boolean(user?.household),
+    queryFn: async () =>
+      (await pb.collection('supplies').getFullList<Supply>({ sort: 'created' })).map((s) => ({
+        ...s,
+        stock_at: toIso(s.stock_at),
+      })),
+  });
+}
+
 /** Live updates: when anyone in the household changes something, refetch. */
 export function useRealtimeSync() {
   const qc = useQueryClient();
@@ -150,6 +164,7 @@ export function useRealtimeSync() {
       ['completions', keys.completions],
       ['completions', keys.measurements],
       ['health_records', keys.health],
+      ['supplies', keys.supplies],
       ['tasks', keys.tasks],
       ['snoozes', keys.snoozes],
       ['cats', keys.cat],

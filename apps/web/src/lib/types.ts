@@ -84,3 +84,15 @@ export interface HealthRecord extends RecordModel {
   user: string;
   expand?: { user?: User };
 }
+
+export interface Supply extends RecordModel {
+  household: string;
+  name: string;
+  emoji: string;
+  unit: string;
+  stock: number;
+  stock_at: string;
+  daily_usage: number;
+  low_days: number;
+  template_key: string;
+}

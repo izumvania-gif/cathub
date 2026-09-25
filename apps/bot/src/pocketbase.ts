@@ -8,6 +8,7 @@ import type {
   HouseholdState,
   ReminderLogRec,
   SnoozeRec,
+  SupplyRec,
   TaskRec,
   UserRec,
 } from './types';
@@ -73,7 +74,7 @@ export class PocketBaseClient {
   async loadAll(): Promise<HouseholdState[]> {
     await this.ensureAuth();
     const since = toPbDate(new Date(Date.now() - RECENT_DAYS * 86_400_000));
-    const [households, users, cats, tasks, recent, snoozes] = await Promise.all([
+    const [households, users, cats, tasks, recent, snoozes, supplies] = await Promise.all([
       this.pb.collection('households').getFullList<HouseholdRec>(),
       this.pb.collection('users').getFullList<UserRec>({ filter: 'household != ""' }),
       this.pb.collection('cats').getFullList<CatRec>({ sort: 'created' }),
@@ -82,6 +83,7 @@ export class PocketBaseClient {
         .collection('completions')
         .getFullList<CompletionRec>({ filter: this.pb.filter('done_at >= {:since}', { since }) }),
       this.pb.collection('snoozes').getFullList<SnoozeRec>(),
+      this.pb.collection('supplies').getFullList<SupplyRec>(),
     ]);
     const withRecent = new Set(recent.map((c) => c.task));
     const older = await Promise.all(
@@ -99,6 +101,9 @@ export class PocketBaseClient {
       snoozes: snoozes
         .filter((s) => s.household === household.id)
         .map((s) => ({ ...s, until: toIso(s.until) })),
+      supplies: supplies
+        .filter((s) => s.household === household.id)
+        .map((s) => ({ ...s, stock_at: toIso(s.stock_at) })),
     }));
   }
 

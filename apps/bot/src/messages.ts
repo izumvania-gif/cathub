@@ -1,6 +1,8 @@
 import {
   describeDue,
   describeSchedule,
+  describeSupply,
+  supplyForecast,
   evaluate,
   urgencyCompare,
   type Evaluation,
@@ -114,8 +116,26 @@ export function summaryText(
     `${i.task.emoji || '🐾'} ${escapeHtml(i.task.title)} — ${describeDue(i.ev, now, tz)}`;
   const parts = [`<b>${escapeHtml(heading)}</b>`];
   parts.push(pending.length ? pending.map(line).join('\n') : 'Всё сделано 🎉');
+  const low = (state.supplies ?? [])
+    .map((s) => ({
+      s,
+      f: supplyForecast(
+        { stock: s.stock, stockAt: s.stock_at, dailyUsage: s.daily_usage, lowDays: s.low_days },
+        now,
+        tz,
+      ),
+    }))
+    .filter((x) => x.f.status !== 'ok');
+  if (low.length) {
+    parts.push(
+      '<b>Пора купить</b>\n' +
+        low
+          .map((x) => `${x.s.emoji || '📦'} ${escapeHtml(x.s.name)} — ${describeSupply(x.f)}`)
+          .join('\n'),
+    );
+  }
   if (done.length)
     parts.push(`<i>Уже сделано: ${done.map((i) => escapeHtml(i.task.title)).join(', ')}</i>`);
   if (appUrl) parts.push(`Приложение: ${appUrl}`);
-  return { text: parts.join('\n\n'), pending: pending.length };
+  return { text: parts.join('\n\n'), pending: pending.length + low.length };
 }

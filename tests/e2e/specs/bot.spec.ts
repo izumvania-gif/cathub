@@ -222,6 +222,33 @@ test('morning digest is sent once when something is pending', async () => {
   ).toHaveLength(1);
 });
 
+test('digest lists supplies that are running out', async () => {
+  const { owner, household, chat } = await linkedOwner();
+  await api(
+    'POST',
+    '/api/collections/supplies/records',
+    {
+      household: household.id,
+      name: 'Наполнитель',
+      emoji: '🪣',
+      unit: 'кг',
+      stock: 0.5,
+      stock_at: new Date().toISOString().replace('T', ' '),
+      daily_usage: 0.3,
+      low_days: 7,
+    },
+    owner.token,
+  );
+  await setUser(owner, { digest_time: mskTime(-1) });
+  const digest = await waitForCall(
+    chat,
+    (c) => String(c.params.text).includes('Доброе утро'),
+    'digest sent',
+  );
+  expect(digest.params.text).toContain('Пора купить');
+  expect(digest.params.text).toContain('Наполнитель — хватит на 1 день');
+});
+
 test('/today replies with the day overview', async () => {
   const { owner, household, chat } = await linkedOwner();
   await createTask(owner, household.id, dueTodayTask('Дело на сегодня'));

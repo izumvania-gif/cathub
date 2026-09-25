@@ -9,6 +9,8 @@ import { TaskCard } from '../components/TaskCard';
 import { Button, Empty } from '../components/ui';
 import { useBoard, type BoardItem } from '../lib/board';
 import { useCat } from '../lib/queries';
+import { SupplyRow, SupplySheet } from '../components/Supplies';
+import { useSupplyForecasts } from '../lib/supplies';
 
 const WEEK = 7 * 86_400_000;
 
@@ -96,6 +98,10 @@ export function Today() {
   const cat = useCat();
   const flow = useCompleteFlow();
   const [open, setOpen] = useState<BoardItem | null>(null);
+  const supplies = useSupplyForecasts();
+  const lowSupplies = supplies.list.filter((x) => x.f.status !== 'ok');
+  const [openSupply, setOpenSupply] = useState<string | null>(null);
+  const selectedSupply = supplies.list.find((x) => x.supply.id === openSupply) ?? null;
 
   // The bowl shows the feeding task: the template one, else a custom daily feeding task.
   const feeding =
@@ -168,6 +174,18 @@ export function Today() {
               onFeed={() => flow.request(feeding)}
             />
           ) : null}
+          {lowSupplies.length ? (
+            <section className="mt-6">
+              <h2 className="text-ink-soft mb-2 px-1 text-sm font-semibold">Заканчивается</h2>
+              <ul className="bg-card divide-line divide-y rounded-3xl">
+                {lowSupplies.map(({ supply, f }) => (
+                  <li key={supply.id}>
+                    <SupplyRow supply={supply} f={f} onOpen={() => setOpenSupply(supply.id)} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           {now_.length ? (
             <Section title="Сейчас" count={now_.length}>
               {now_.map(card)}
@@ -196,6 +214,11 @@ export function Today() {
         </>
       )}
 
+      <SupplySheet
+        supply={selectedSupply?.supply ?? null}
+        f={selectedSupply?.f ?? null}
+        onClose={() => setOpenSupply(null)}
+      />
       <TaskActionsSheet item={open} now={now} tz={tz} onClose={() => setOpen(null)} />
       <DoubleCheckSheet
         item={flow.confirm}

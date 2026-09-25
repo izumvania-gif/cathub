@@ -59,6 +59,18 @@ export interface ReminderLogRec {
   text: string;
 }
 
+export interface SupplyRec {
+  id: string;
+  household: string;
+  name: string;
+  emoji: string;
+  unit: string;
+  stock: number;
+  stock_at: string;
+  daily_usage: number;
+  low_days: number;
+}
+
 /** Everything the reminder loop needs for one household. */
 export interface HouseholdState {
   household: HouseholdRec;
@@ -67,4 +79,5 @@ export interface HouseholdState {
   tasks: TaskRec[];
   completions: CompletionRec[];
   snoozes: SnoozeRec[];
+  supplies: SupplyRec[];
 }

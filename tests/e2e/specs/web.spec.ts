@@ -150,3 +150,21 @@ test('household page offers the calendar subscription', async ({ page }) => {
     /^webcal:\/\/.+\/api\/cathub\/calendar\/[a-z0-9]{32}\.ics$/,
   );
 });
+
+test('supplies: track food, see the low warning on Today, top it up', async ({ page }) => {
+  await onboard(page);
+  await page.getByRole('link', { name: 'Дела' }).click();
+  await page.getByRole('button', { name: 'Добавить', exact: true }).click();
+  await page.getByLabel(/Сколько есть сейчас/).fill('0,2');
+  await page.getByRole('button', { name: 'Добавить', exact: true }).last().click();
+  await expect(page.getByText('Запас добавлен')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Сухой корм.*хватит на 3 дня/ })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Сегодня' }).click();
+  await expect(page.getByRole('heading', { name: 'Заканчивается' })).toBeVisible();
+  await page.getByRole('button', { name: /Сухой корм/ }).click();
+  await page.getByLabel(/Сколько купили/).fill('2');
+  await page.getByRole('button', { name: 'Добавить к остатку' }).click();
+  await expect(page.getByText('Запас пополнен')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Заканчивается' })).toHaveCount(0);
+});
