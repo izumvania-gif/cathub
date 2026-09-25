@@ -154,7 +154,7 @@ export function Onboarding() {
                   className="font-display tracking-[0.2em]"
                 />
               </Field>
-              {error ? <p className="text-tomato text-sm">{error}</p> : null}
+              {error ? <p className="text-tomato-ink text-sm">{error}</p> : null}
               <Button busy={busy} disabled={code.trim().length < 6} onClick={join}>
                 Присоединиться
               </Button>
@@ -255,7 +255,7 @@ export function Onboarding() {
             Для редких дел укажите, когда это было в последний раз, — тогда срок посчитается
             правильно. Если не помните, дело появится в списке «Сейчас».
           </p>
-          {error ? <p className="text-tomato mt-4 text-sm">{error}</p> : null}
+          {error ? <p className="text-tomato-ink mt-4 text-sm">{error}</p> : null}
           <div className="mt-6 grid gap-2">
             <Button busy={busy} disabled={picked.size === 0} onClick={create}>
               Готово, создать дом

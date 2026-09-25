@@ -105,7 +105,7 @@ export function Login() {
             autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
           />
         </Field>
-        {error ? <p className="text-tomato text-sm">{error}</p> : null}
+        {error ? <p className="text-tomato-ink text-sm">{error}</p> : null}
         <Button type="submit" busy={busy}>
           {mode === 'login' ? 'Войти' : 'Создать аккаунт'}
         </Button>

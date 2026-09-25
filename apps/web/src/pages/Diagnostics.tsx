@@ -110,7 +110,7 @@ export function Diagnostics() {
         {beats.map((b) => (
           <li key={b.id} className="flex justify-between px-4 py-2">
             <span>{new Date(b.created).toLocaleTimeString('ru-RU')}</span>
-            <span className={b.telegram_ok ? 'text-ok' : 'text-bad'}>
+            <span className={b.telegram_ok ? 'text-mint-ink' : 'text-tomato-ink'}>
               {b.telegram_ok ? `TG ${b.telegram_ms} мс` : 'TG ✕'}
             </span>
           </li>
@@ -122,7 +122,7 @@ export function Diagnostics() {
 }
 
 function Row(props: { label: string; ok: boolean; pending: boolean; children: React.ReactNode }) {
-  const color = props.pending ? 'bg-warn' : props.ok ? 'bg-ok' : 'bg-bad';
+  const color = props.pending ? 'bg-amber' : props.ok ? 'bg-mint' : 'bg-tomato';
   return (
     <div className="flex gap-3 rounded-2xl bg-white p-4 ring-1 ring-black/5">
       <span className={`mt-1.5 size-2.5 shrink-0 rounded-full ${color}`} />

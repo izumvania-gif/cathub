@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { SleepyCat } from './SleepyCat';
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -23,7 +24,7 @@ export function Button({
         variant === 'primary' && 'bg-ink text-paper',
         variant === 'secondary' && 'bg-tint text-ink',
         variant === 'ghost' && 'text-ink-soft',
-        variant === 'danger' && 'bg-tomato/10 text-tomato',
+        variant === 'danger' && 'bg-tomato/10 text-tomato-ink',
         className,
       )}
     >
@@ -159,7 +160,8 @@ export function Avatar({ name, className }: { name?: string; className?: string 
 
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="bg-card rounded-3xl p-6 text-center">
+    <div className="bg-card flex flex-col items-center rounded-3xl p-6 text-center">
+      <SleepyCat className="mb-2 h-16" />
       <p className="font-semibold">{title}</p>
       {children ? <div className="text-ink-soft mt-1 text-sm">{children}</div> : null}
     </div>

@@ -82,12 +82,14 @@ export function Tasks() {
                 <Link href={`/tasks/${task.id}`} className="flex items-center gap-3 px-4 py-3">
                   <span className="text-xl">{task.emoji || '🐾'}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{task.title}</span>
+                    <span className="line-clamp-2 block font-medium leading-snug">
+                      {task.title}
+                    </span>
                     <span className="text-ink-soft block text-sm">
                       {describeSchedule(task.schedule)}
                     </span>
                   </span>
-                  <span className="text-ink-soft shrink-0 text-right text-xs">
+                  <span className="text-ink-soft max-w-[30%] shrink-0 text-right text-xs leading-tight text-balance">
                     {ev.status === 'done' ? 'сделано' : describeDue(ev, now, tz)}
                   </span>
                 </Link>

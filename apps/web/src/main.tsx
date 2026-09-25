@@ -2,9 +2,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './index.css';
+import { captureInstallPrompt } from './lib/install';
 import { captureTelegramInitData } from './lib/telegram';
 
 captureTelegramInitData();
+captureInstallPrompt();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -10,9 +10,12 @@
   --ink-soft: #5d6088;
   --line: #e3e2ee;
   --amber: #f5b62e;
-  --amber-ink: #6b4a00;
+  --amber-ink: #4a3300;
   --mint: #35a374;
   --tomato: #e2563a;
+  /* text variants that pass WCAG AA (4.5:1) on cards */
+  --tomato-ink: #b93a20;
+  --mint-ink: #1f7a53;
   --tint: #e9e8f5;
   /* data series (validated: lightness band, chroma floor, contrast vs card) */
   --data: #4a4fc4;
@@ -29,6 +32,8 @@
     --amber-ink: #2a1d00;
     --mint: #4cc08e;
     --tomato: #f2735a;
+    --tomato-ink: #f2735a;
+    --mint-ink: #4cc08e;
     --tint: #262a52;
     --data: #7f84f7;
   }
@@ -46,6 +51,8 @@
   --color-amber-ink: var(--amber-ink);
   --color-mint: var(--mint);
   --color-tomato: var(--tomato);
+  --color-tomato-ink: var(--tomato-ink);
+  --color-mint-ink: var(--mint-ink);
   --color-tint: var(--tint);
   --color-data: var(--data);
 }

@@ -24,7 +24,7 @@ export default defineConfig({
     { name: 'bot', testMatch: /bot\.spec\.ts/ },
     {
       name: 'web',
-      testMatch: /web\.spec\.ts/,
+      testMatch: /(web|a11y)\.spec\.ts/,
       use: { ...devices['iPhone 13'], browserName: 'chromium' },
     },
   ],

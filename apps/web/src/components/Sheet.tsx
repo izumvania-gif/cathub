@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
 /** Bottom sheet for secondary actions and forms (one-handed use). */
 export function Sheet({
@@ -13,11 +13,43 @@ export function Sheet({
   title?: string;
   children: ReactNode;
 }) {
+  const panel = useRef<HTMLDivElement>(null);
+
+  // Dialog focus: move focus inside on open, keep Tab within the sheet, restore it on close.
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const previous = document.activeElement as HTMLElement | null;
+    const focusables = () =>
+      [
+        ...(panel.current?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? []),
+      ].filter((el) => el.offsetParent !== null);
+    const t = setTimeout(() => {
+      const first = focusables().find((el) => el.hasAttribute('autofocus')) ?? focusables()[0];
+      (first ?? panel.current)?.focus();
+    }, 50);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Tab') return;
+      const list = focusables();
+      if (!list.length) return;
+      const first = list[0]!;
+      const last = list[list.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('keydown', onKey);
+      previous?.focus?.();
+    };
   }, [open, onClose]);
 
   return (
@@ -32,7 +64,9 @@ export function Sheet({
             onClick={onClose}
           />
           <motion.div
-            className="bg-card absolute inset-x-0 bottom-0 mx-auto max-h-[92dvh] max-w-lg overflow-y-auto rounded-t-[2rem] px-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-3"
+            ref={panel}
+            tabIndex={-1}
+            className="bg-card absolute inset-x-0 bottom-0 outline-none mx-auto max-h-[92dvh] max-w-lg overflow-y-auto rounded-t-[2rem] px-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-3"
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}

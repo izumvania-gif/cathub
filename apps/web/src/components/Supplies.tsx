@@ -38,21 +38,25 @@ export function SupplyRow({
     >
       <span className="text-xl">{supply.emoji || '📦'}</span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium">{supply.name}</span>
+        <span className="line-clamp-2 block font-medium leading-snug">{supply.name}</span>
         <span
           className={clsx(
             'block text-sm',
             f.status === 'ok'
               ? 'text-ink-soft'
               : f.status === 'low'
-                ? 'text-amber-ink bg-amber inline rounded-md px-1.5'
-                : 'text-tomato',
+                ? 'text-ink font-semibold'
+                : 'text-tomato-ink font-semibold',
           )}
         >
-          {statusText(f)}
+          {f.status === 'low' ? '⚠️ ' : ''}
+          {describeSupply(f)}
         </span>
+        {f.runsOutOn && f.status !== 'out' ? (
+          <span className="text-ink-soft block text-xs">до {dayMonth(f.runsOutOn)}</span>
+        ) : null}
       </span>
-      <span className="text-ink-soft shrink-0 text-sm tabular-nums">
+      <span className="text-ink-soft shrink-0 text-sm whitespace-nowrap tabular-nums">
         ≈ {formatAmount(f.remaining, supply.unit)}
       </span>
     </button>

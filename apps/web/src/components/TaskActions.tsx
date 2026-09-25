@@ -171,7 +171,7 @@ export function TaskActionsSheet({
               <Button variant="secondary" onClick={() => setMode('backdate')}>
                 Сделано раньше…
               </Button>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-2">
                 <Button
                   variant="secondary"
                   onClick={() =>

@@ -6,11 +6,11 @@ import type { BoardItem } from '../lib/board';
 import { Avatar } from './ui';
 
 const STATUS_TEXT: Record<TaskStatus, string> = {
-  overdue: 'text-tomato',
+  overdue: 'text-tomato-ink',
   due: 'text-amber-ink bg-amber rounded-md px-1.5',
   soon: 'text-ink',
   upcoming: 'text-ink-soft',
-  done: 'text-mint',
+  done: 'text-mint-ink',
 };
 
 function barColor(status: TaskStatus) {
@@ -59,21 +59,21 @@ export function TaskCard({
           <span className="min-w-0">
             <span
               className={clsx(
-                'block truncate font-semibold',
+                'line-clamp-2 block font-semibold leading-snug',
                 done && 'text-ink-soft line-through decoration-2',
               )}
             >
               {task.title}
             </span>
-            <span className="mt-0.5 flex items-center gap-1.5 text-sm">
-              <span className={clsx('font-medium', STATUS_TEXT[ev.status])}>
+            <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm">
+              <span className={clsx('font-medium whitespace-nowrap', STATUS_TEXT[ev.status])}>
                 {ev.snoozed ? 'отложено' : done ? 'сделано' : describeDue(ev, now, tz)}
               </span>
               {assignee && !done ? (
                 <span className="text-ink-soft shrink-0">· {assignee}</span>
               ) : null}
               {last && !assignee ? (
-                <span className="text-ink-soft flex min-w-0 items-center gap-1 truncate">
+                <span className="text-ink-soft flex min-w-0 items-center gap-1 whitespace-nowrap">
                   · {who ? <Avatar name={who} className="size-4 text-[0.55rem]" /> : null}
                   {last.kind === 'skipped' ? 'пропуск ' : ''}
                   {describeWhen(last.done_at, now, tz)}

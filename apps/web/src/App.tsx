@@ -1,23 +1,37 @@
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
 import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { useEffect } from 'react';
+import { MotionConfig } from 'motion/react';
+import { lazy, Suspense, useEffect } from 'react';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster } from 'sonner';
 import { Redirect, Route, Switch, useLocation } from 'wouter';
 import { OfflineBanner } from './components/OfflineBanner';
 import { TabBar } from './components/TabBar';
 import { refreshAuth, useUser } from './lib/auth';
 import { useRealtimeSync } from './lib/queries';
-import { Diagnostics } from './pages/Diagnostics';
-import { Health } from './pages/Health';
-import { Household } from './pages/Household';
-import { Journal } from './pages/Journal';
 import { Login } from './pages/Login';
 import { PENDING_CODE_KEY } from './lib/invite';
 import { Onboarding } from './pages/Onboarding';
-import { TaskEditor } from './pages/TaskEditor';
 import { Tasks } from './pages/Tasks';
 import { Today } from './pages/Today';
+
+// Less-used screens load on demand to keep the first load small.
+const Diagnostics = lazy(() =>
+  import('./pages/Diagnostics').then((m) => ({ default: m.Diagnostics })),
+);
+const Health = lazy(() => import('./pages/Health').then((m) => ({ default: m.Health })));
+const Household = lazy(() => import('./pages/Household').then((m) => ({ default: m.Household })));
+const Journal = lazy(() => import('./pages/Journal').then((m) => ({ default: m.Journal })));
+const TaskEditor = lazy(() =>
+  import('./pages/TaskEditor').then((m) => ({ default: m.TaskEditor })),
+);
+
+const Loading = () => (
+  <div className="mx-auto max-w-lg px-4 pt-16" aria-busy="true" aria-label="Загрузка">
+    <div className="bg-card h-40 animate-pulse rounded-[2rem]" />
+  </div>
+);
 
 const WEEK = 7 * 24 * 60 * 60 * 1000;
 
@@ -96,7 +110,13 @@ export function App() {
       client={queryClient}
       persistOptions={{ persister, maxAge: WEEK, buster: 'v1' }}
     >
-      <Routes />
+      <MotionConfig reducedMotion="user">
+        <ErrorBoundary>
+          <Suspense fallback={<Loading />}>
+            <Routes />
+          </Suspense>
+        </ErrorBoundary>
+      </MotionConfig>
       <Toaster position="top-center" richColors closeButton={false} offset={16} />
     </PersistQueryClientProvider>
   );

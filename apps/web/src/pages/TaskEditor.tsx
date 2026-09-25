@@ -378,6 +378,7 @@ function Editor({ task }: { task?: Task }) {
               </Field>
               <Field label="&nbsp;">
                 <select
+                  aria-label="Единица интервала"
                   className="bg-card border-line min-h-12 w-full rounded-2xl border px-3"
                   value={d.unit}
                   onChange={(e) => set('unit', e.target.value as IntervalUnit)}

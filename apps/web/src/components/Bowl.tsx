@@ -8,6 +8,11 @@ import { useId } from 'react';
 export function Bowl({ level, name }: { level: number; name: string }) {
   const id = useId();
   const l = Math.max(0, Math.min(1, level));
+  // Fit the name on the bowl's side (~150 units wide at the text line).
+  const upper = name.toUpperCase();
+  const label = upper.length > 16 ? upper.slice(0, 15) + '…' : upper;
+  const fontSize = Math.min(13, Math.max(7, 150 / (label.length * 0.95)));
+  const letterSpacing = label.length > 10 ? 1 : 3;
   // Food surface: hidden below the opening when empty, bulging up to the rim when full.
   const foodCy = 66 - l * 22;
   const kibble = [
@@ -52,12 +57,12 @@ export function Bowl({ level, name }: { level: number; name: string }) {
         y="86"
         textAnchor="middle"
         fontFamily="var(--font-display)"
-        fontSize="13"
+        fontSize={fontSize}
         fontWeight="700"
-        letterSpacing="3"
+        letterSpacing={letterSpacing}
         fill="var(--amber)"
       >
-        {name.toUpperCase().slice(0, 12)}
+        {label}
       </text>
       {/* rim */}
       <ellipse cx="110" cy="42" rx="72" ry="17" fill="var(--ink)" />

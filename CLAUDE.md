@@ -8,7 +8,7 @@ CatHub is a mobile-first PWA for a household (several people, one cat) to track 
 feeding, litter, grooming, parasite treatments, vaccinations, vet visits. Reminders go through a
 Telegram bot. The owner and users are in Russia. The UI language is Russian.
 
-**Current state: Phases 1–4 done** (phase 5, polish, is next). Working: the schedule engine in `packages/core`, the
+**Current state: Phases 1–5 done** (only manual testing on real phones remains). Working: the schedule engine in `packages/core`, the
 PocketBase schema and household/Telegram routes, the web app (login, onboarding, Today, journal,
 task list and editor, household settings, `/diag`), and the bot (linking via `/start <token>`,
 reminders with done/snooze/skip buttons, `/today`, morning digest, family group chat), and health
@@ -97,7 +97,9 @@ pnpm-workspaces monorepo:
   Users can't set `household`/`role` through the API; membership changes go through the custom
   routes in `pb_hooks/household.pb.js` (`POST /api/cathub/household`, `/join`, `/invite`). Hooks run
   each handler in its own JS VM, so shared helpers live in `pb_hooks/lib/*.js` and are `require()`d
-  inside handlers.
+  inside handlers. `pb_hooks/static.pb.js` gzips and sets cache headers for the static PWA only:
+  never gzip `/api/`, it buffers the realtime SSE stream. `specs/a11y.spec.ts` runs axe on every
+  screen in both themes and must stay at zero violations.
 
 Web app notes (`apps/web/src`): routing is `wouter` (`App.tsx`), data is TanStack Query
 (`lib/queries.ts`) invalidated by PocketBase realtime subscriptions (`useRealtimeSync`), and

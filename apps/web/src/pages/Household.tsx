@@ -42,11 +42,11 @@ export function InviteCard({ code, onRotate }: { code: string; onRotate?: () => 
     <div className="bg-ink text-paper rounded-3xl p-5">
       <p className="text-paper/70 text-sm">Код приглашения</p>
       <p className="font-display mt-1 text-3xl font-semibold tracking-[0.18em]">{code}</p>
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
           onClick={share}
-          className="bg-amber text-amber-ink flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl font-semibold"
+          className="bg-amber text-amber-ink flex min-h-11 flex-1 items-center justify-center gap-2 rounded-2xl px-3 font-semibold whitespace-nowrap"
         >
           <Share2 className="size-4" /> Отправить ссылку
         </button>
@@ -383,7 +383,7 @@ function CalendarCard() {
         >
           Подписаться на календарь
         </a>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-2">
           <Button
             variant="secondary"
             onClick={() =>
@@ -427,7 +427,7 @@ function ExportCard() {
         Сервер делает резервную копию каждую ночь. Здесь можно скачать всё себе: дела, отметки,
         записи о здоровье.
       </p>
-      <div className="mt-3 grid grid-cols-2 gap-2">
+      <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-2">
         <Button variant="secondary" busy={busy === 'json'} onClick={() => run('json')}>
           Всё (JSON)
         </Button>

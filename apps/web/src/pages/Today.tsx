@@ -3,6 +3,8 @@ import { AnimatePresence } from 'motion/react';
 import { useState } from 'react';
 import { Link } from 'wouter';
 import { Bowl } from '../components/Bowl';
+import { InstallHint } from '../components/InstallHint';
+import { SleepyCat } from '../components/SleepyCat';
 import { DoubleCheckSheet, TaskActionsSheet } from '../components/TaskActions';
 import { useCompleteFlow } from '../lib/completeFlow';
 import { TaskCard } from '../components/TaskCard';
@@ -84,7 +86,7 @@ function Section({
     <section className="mt-6">
       <h2 className="text-ink-soft mb-2 flex items-baseline gap-2 px-1 text-sm font-semibold">
         {title}
-        {count !== undefined ? <span className="text-ink-soft/70 font-normal">{count}</span> : null}
+        {count !== undefined ? <span className="text-ink-soft font-normal">{count}</span> : null}
       </h2>
       <ul className="grid gap-2">
         <AnimatePresence initial={false}>{children}</AnimatePresence>
@@ -210,10 +212,14 @@ export function Today() {
             </Section>
           ) : null}
           {!now_.length && !soon.length && !later.length ? (
-            <p className="text-ink-soft mt-8 text-center text-sm">
-              На ближайшую неделю больше ничего. Отдыхайте.
-            </p>
+            <div className="mt-8 flex flex-col items-center text-center">
+              <SleepyCat />
+              <p className="text-ink-soft mt-2 text-sm">
+                На ближайшую неделю больше ничего. Отдыхайте.
+              </p>
+            </div>
           ) : null}
+          <InstallHint />
         </>
       )}
 
