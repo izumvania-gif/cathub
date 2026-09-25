@@ -13,6 +13,7 @@ import type {
 } from './types';
 
 export type Heartbeat = {
+  bot_username: string;
   telegram_ok: boolean;
   telegram_ms: number;
   telegram_error: string;

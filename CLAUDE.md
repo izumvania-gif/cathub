@@ -63,7 +63,8 @@ pnpm-workspaces monorepo:
   the message text. The same tick edits open reminders whose occurrence was handled (in the app or
   another chat) to "✅ Петя, 20:03" — polling, not realtime, since Node has no EventSource.
   Callback data is `<d|s|z>:<taskId>:<occurrence seconds>`. Linking: the web app calls
-  `POST /api/cathub/telegram/link` (needs `TELEGRAM_BOT_USERNAME`), and the bot consumes the
+  `POST /api/cathub/telegram/link` (bot username from `TELEGRAM_BOT_USERNAME` or else the latest
+  `diagnostics.bot_username` heartbeat), and the bot consumes the
   token from `telegram_links`.
 - `pocketbase/`: PocketBase backend (auth, SQLite, realtime, files). Schema lives in
   `pb_migrations` and access control in API rules. Every record is scoped to the user's `household`.

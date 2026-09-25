@@ -7,6 +7,7 @@ type Heartbeat = RecordModel & {
   telegram_ms: number;
   telegram_error: string;
   bot_version: string;
+  bot_username: string;
   uptime_s: number;
   created: string;
 };
@@ -92,7 +93,7 @@ export function Diagnostics() {
         <Row label="Бот → Telegram" ok={Boolean(last?.telegram_ok)} pending={!last}>
           {last
             ? last.telegram_ok
-              ? `ok, ${last.telegram_ms} мс`
+              ? `ok, ${last.telegram_ms} мс${last.bot_username ? ` · @${last.bot_username}` : ''}`
               : `ошибка: ${last.telegram_error || 'нет ответа'}`
             : 'нет данных от бота'}
           {last && (

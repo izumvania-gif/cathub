@@ -49,6 +49,7 @@ async function heartbeatLoop(pb: PocketBaseClient) {
     if (pb.enabled) {
       try {
         await pb.writeHeartbeat({
+          bot_username: lastProbe?.username ?? '',
           telegram_ok: lastProbe?.ok ?? false,
           telegram_ms: lastProbe?.ms ?? 0,
           telegram_error: config.botToken ? (lastProbe?.error ?? '') : 'BOT_TOKEN not set',

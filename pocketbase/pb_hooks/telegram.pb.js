@@ -7,8 +7,23 @@ routerAdd(
   'POST',
   '/api/cathub/telegram/link',
   (e) => {
-    const bot = String($os.getenv('TELEGRAM_BOT_USERNAME') || '').replace(/^@/, '');
-    if (!bot) throw new BadRequestError('Telegram-бот ещё не настроен на сервере.');
+    let bot = String($os.getenv('TELEGRAM_BOT_USERNAME') || '')
+      .replace(/^@/, '')
+      .trim();
+    if (!bot) {
+      // Fall back to the username the bot reported in its latest heartbeat.
+      try {
+        const hb = $app.findRecordsByFilter('diagnostics', "bot_username != ''", '-created', 1, 0);
+        if (hb.length) bot = hb[0].getString('bot_username');
+      } catch (_) {
+        /* no heartbeats yet */
+      }
+    }
+    if (!bot) {
+      throw new BadRequestError(
+        'Бот ещё не подключился к Telegram. Проверьте переменную BOT_TOKEN и перезапустите проект; подробности — на странице /diag.',
+      );
+    }
     const col = $app.findCollectionByNameOrId('telegram_links');
     // One active token per user.
     for (const old of $app.findRecordsByFilter('telegram_links', 'user = {:u}', '', 0, 0, {
