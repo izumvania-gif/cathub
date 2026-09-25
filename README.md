@@ -9,3 +9,5 @@
 - [План разработки](docs/PLAN.md)
 - [Референсы: приложения, open-source, ветеринарные нормы, PWA](docs/REFERENCES.md)
 - [Хостинг и сервисы для России](docs/HOSTING_RU.md)
+- [Деплой на Amvera](docs/DEPLOY_AMVERA.md) (выбранный хостинг)
+- [Деплой в Yandex Cloud с relay](docs/DEPLOY_YC.md) (не выбран, запасной план для Telegram)

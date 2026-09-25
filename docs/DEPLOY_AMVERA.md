@@ -1,0 +1,234 @@
+# Деплой CatHub на Amvera
+
+> Состояние на 25.09.2026. Собрано исследованием с перекрёстной проверкой: каждый вывод перепроверял
+> независимый агент. Сайты amvera.ru и docs.amvera.ru из среды исследования были недоступны, поэтому
+> маркетинговые заявления Amvera взяты из поисковой выдачи. Реальное поведение платформы сверено
+> по коду и истории коммитов проектов на GitHub, которые деплоятся на Amvera в 2026 году.
+> Источники в конце.
+
+## Коротко
+
+- **Где встроенный прокси.** Включать его не нужно, отдельной настройки нет. В **регионе «Москва»**
+  Amvera сама пропускает исходящие запросы к фиксированному списку хостов (`api.telegram.org`,
+  `api.openai.com`, по заявлению — Anthropic) через зарубежный IP. Бесплатно. Бот ходит на обычный
+  `https://api.telegram.org`. В регионах Варшава и Майами прокси нет, там прямой доступ.
+- **В 2026 году прокси в целом работает**: боты в Москве живут на нём в продакшене. **Бывают деградации**:
+  в одном проекте был целый день таймаутов, в другом — сотни таймаутов за неделю в августе. Поэтому
+  бот обязан переживать сетевые сбои (§4).
+- **Вебхуки Telegram в Москву не доходят**, поэтому используем только long polling. Так и заложено в плане.
+- **PocketBase на Amvera запускается** через Dockerfile с постоянным хранилищем `/data`. До написания
+  приложения нужно проверить три вещи (§2).
+- **Цена:** около 290–490 ₽/мес за один проект.
+
+## 1. Схема
+
+```
+Телефоны семьи (РФ, без VPN)
+      │ HTTPS: cathub-<user>.amvera.io или свой домен (Let's Encrypt автоматически)
+      ▼
+┌──────── Amvera, регион «Москва», один проект ────────┐
+│ контейнер (Dockerfile):                               │
+│   pocketbase serve :8090  ← API, realtime (SSE), PWA  │
+│   node bot.js ── http://127.0.0.1:8090 ──┘            │
+│         │ long polling                                │
+│  /data (persistenceMount): pb_data (SQLite)           │
+└─────────┼─────────────────────────────────────────────┘
+          │ https://api.telegram.org → встроенный прокси Amvera → зарубежный IP
+          ▼
+      Telegram
+```
+
+**Почему один проект, а не два.**
+- `amvera.yml` читается только из корня репозитория, путь к нему не настраивается. Два проекта из
+  одного монорепо потребовали бы отдельных веток или трюков.
+- В одном контейнере бот ходит к PocketBase по `127.0.0.1`, и внутренняя сеть не нужна.
+- Вдвое дешевле.
+- Минус: у PocketBase и бота общие рестарты. Для семейного приложения это приемлемо.
+- Принцип Amvera «один проект = один процесс» носит рекомендательный характер: несколько процессов
+  в одном контейнере на Amvera в 2026 году работают.
+
+## 2. Этап 0: проверки до разработки
+
+Сначала деплоим «пустой» PocketBase и тестового бота из 20 строк и проверяем:
+
+- [ ] **SQLite на `/data`.** PocketBase жёстко включает WAL, а `/data` у Amvera, судя по признакам, —
+  сетевой том. Если SQLite в WAL на сетевой ФС открывают два процесса, база может повредиться.
+  Что проверяем:
+  - несколько рестартов и передеплоев подряд;
+  - логи на `disk I/O error`;
+  - данные после передеплоя на месте.
+
+  Если что-то сломается, собираем PocketBase как Go-фреймворк со своим `DBConnect`
+  (`journal_mode=DELETE`) или меняем хостинг.
+- [ ] **Перекрытие контейнеров при рестарте.** По отчётам, старый и новый контейнеры 1–7 секунд
+  работают одновременно. Пробуем `run.singleton: true`. Этот ключ встречается в реальных `amvera.yml`,
+  но официально его семантика не описана. Проверяем, что двух экземпляров не бывает.
+- [ ] **Realtime (SSE) через ingress Amvera.** Подписаться на коллекцию с телефона через мобильный
+  интернет, подождать 2–5 минут без активности, изменить запись и проверить, пришло ли событие.
+  Для WebSocket подтверждено, что работает, для SSE данных нет. Запасной вариант — перезапрашивать
+  данные при переподключении и при возврате в приложение. Это стоит сделать в любом случае.
+- [ ] **Telegram из контейнера.** Вызвать `getMe` и long polling `getUpdates`, затем несколько дней
+  считать ошибки в логах.
+
+## 3. Конфигурация (черновик для фазы 0)
+
+`amvera.yml` в корне репозитория. Формат взят из реальных проектов 2026 года. Неизвестные ключи дают
+ошибку `Configuration error… unknown fields`, и видна она только в логе запуска.
+
+```yaml
+meta:
+  environment: docker
+  toolchain:
+    name: docker
+    version: latest
+build:
+  dockerfile: Dockerfile
+  skip: false
+run:
+  persistenceMount: /data
+  containerPort: 8090
+  singleton: true   # проверить на этапе 0; если Amvera не примет ключ — убрать
+```
+
+`Dockerfile`: многоэтапная сборка. Бот собирается в один файл (esbuild или tsup), поэтому
+`node_modules` в итоговый образ не попадают.
+
+```dockerfile
+FROM node:22-alpine AS build
+WORKDIR /src
+RUN corepack enable
+COPY . .
+RUN pnpm install --frozen-lockfile && pnpm -r build
+
+FROM node:22-alpine
+ARG PB_VERSION=0.0.0   # закрепить конкретную версию: PocketBase ещё не 1.0
+RUN apk add --no-cache bash ca-certificates unzip wget \
+ && wget -q https://github.com/pocketbase/pocketbase/releases/download/v${PB_VERSION}/pocketbase_${PB_VERSION}_linux_amd64.zip \
+ && unzip pocketbase_${PB_VERSION}_linux_amd64.zip -d /pb && rm pocketbase_*.zip
+COPY --from=build /src/apps/web/dist /pb/pb_public
+COPY --from=build /src/pocketbase/pb_migrations /pb/pb_migrations
+COPY --from=build /src/pocketbase/pb_hooks /pb/pb_hooks
+COPY --from=build /src/apps/bot/dist /app/bot
+COPY deploy/entrypoint.sh /entrypoint.sh
+CMD ["/bin/bash", "/entrypoint.sh"]
+```
+
+`deploy/entrypoint.sh`:
+
+```bash
+#!/bin/bash
+# PocketBase по умолчанию слушает 127.0.0.1 — для Amvera нужен 0.0.0.0, иначе 503.
+/pb/pocketbase serve --http=0.0.0.0:8090 --dir=/data/pb_data \
+  --publicDir=/pb/pb_public --hooksDir=/pb/pb_hooks --migrationsDir=/pb/pb_migrations &
+node /app/bot/index.js &
+# Если упал любой процесс — завершаем контейнер целиком, Amvera его перезапустит.
+wait -n
+exit 1
+```
+
+**Особенности Amvera, которые нужно учитывать:**
+- Переменные окружения доступны только во время работы контейнера, при сборке их нет. PWA не
+  запекает URL API в сборку, а обращается к PocketBase по своему же origin (он её и раздаёт).
+- Контейнер работает в UTC. Часовой пояс дома хранится в данных (`Europe/Moscow`), это уже заложено в план.
+- `/app` и всё, что вне `/data`, сбрасывается при каждом перезапуске.
+- Тело запроса ограничено примерно 20 МБ (ответ 413). Фото кота сжимаем на клиенте.
+- Проект, выключенный дольше 30 дней, замораживается, и привязанные домены отвязываются.
+- Если загрузка PocketBase с GitHub на этапе сборки не проходит, бинарник можно положить в репозиторий
+  через Git LFS. Это нужно проверить.
+
+## 4. Требования к коду бота
+
+- **Long polling**, один экземпляр (`singleton`). Второй экземпляр получит 409 Conflict.
+- `TELEGRAM_API_ROOT` по умолчанию пустой, то есть используется стандартный `https://api.telegram.org`
+  через прокси Amvera. Переменную оставляем как запасной путь на свой relay.
+- **Принудительный IPv4.** Зависания на IPv6 встречались в нескольких проектах на Amvera:
+  ```ts
+  import https from 'node:https';
+  const agent = new https.Agent({ family: 4, keepAlive: true });
+  new Bot(token, { client: { apiRoot, baseFetchConfig: { agent, compress: true } } });
+  ```
+- **DNS не переопределять.** Неизвестно, как устроен перехват у Amvera, и свой резолвер может его обойти.
+- **Ретраи с backoff** вокруг `bot.start()` и `getMe` при старте. Иначе, как в одном из отчётов, бот
+  выглядит живым, но на команды не отвечает. Процесс не должен падать от сетевой ошибки.
+- **Напоминания идемпотентны.** В `reminder_log` запись помечается отправленной только после
+  успешного ответа Telegram, иначе повтор на следующей минуте.
+- **Health-check:** периодический `getMe` на новом соединении. Если бот не может достучаться до Telegram
+  N минут подряд, это видно в логах, а при первой возможности приходит сообщение владельцу.
+
+## 5. Деплой и CI/CD
+
+1. Создать проект в Amvera: регион «Москва», тип Docker, подключить репозиторий GitHub (PAT, событие Push, ветка `main`).
+2. Во вкладке «Переменные» задать `BOT_TOKEN`, логин и пароль суперпользователя PocketBase
+   (для бота) и `TZ` при необходимости.
+3. Домен: сначала бесплатный `cathub-<user>.amvera.io`. Позже свой `.ru` (A-запись и TXT-подтверждение,
+   Let's Encrypt выпускается автоматически). Cloudflare в режиме proxy не включать.
+4. **Автодеплой из GitHub иногда не срабатывает.** В сентябре 2026 он не работал двое суток. Запасной
+   путь: `git push amvera main:master` в git-репозиторий Amvera или CLI `amvera` ([amvera-cloud/cli](https://github.com/amvera-cloud/cli)).
+5. CI в GitHub Actions: lint, typecheck, test и build на каждый push. Деплой запускает Amvera.
+6. Если сборка упала, продолжает работать последний успешный образ.
+
+## 6. Бэкапы
+
+- **Основной:** встроенные бэкапы PocketBase по cron с выгрузкой в S3 у российского провайдера
+  (Timeweb S3 или Yandex Object Storage, копейки в месяц). Это консистентный снимок базы.
+- **Дополнительный:** на тарифе «Начальный Плюс» и выше у Amvera есть скачиваемые бэкапы `/data` за 2 дня.
+  Файловая копия живой SQLite в WAL может оказаться неконсистентной, поэтому основным его не делаем.
+- Раз в месяц проверять восстановление из бэкапа.
+
+## 7. Стоимость
+
+Цены взяты из документации и примеров 2026 года, перед оплатой их нужно сверить.
+
+| Тариф | Ресурсы | ₽/мес |
+|---|---|---|
+| Пробный | ~100 МБ RAM | 170 (для PocketBase и Node мало) |
+| **Начальный** | 0,25 vCPU, 0,5 ГБ RAM, 5 ГБ | **290** (минимум для CatHub) |
+| **Начальный Плюс** | 0,5 vCPU, 1 ГБ RAM, 7 ГБ, бэкапы `/data` | **490** (рекомендую к запуску) |
+| Стандартный | больше ресурсов | 1 450 |
+
+- Тарификация поминутная, время сборки тоже оплачивается. При регистрации дают приветственный
+  баланс около 111 ₽. Оплата российской картой.
+- Домен `.ru` — опционально, около 200–900 ₽/год.
+
+## 8. Запасные планы
+
+| Что случилось | Что делаем |
+|---|---|
+| Прокси в Москве часто деградирует | Выносим бота отдельным проектом в регион **Варшава** (прямой доступ к Telegram, так рекомендует сама Amvera). PocketBase и PWA остаются в Москве, бот ходит к PocketBase по публичному HTTPS под сервисным аккаунтом. Код уже поддерживает `PB_URL` |
+| Amvera убрала прокси, или Варшава недоступна | Свой relay на зарубежном VPS и `TELEGRAM_API_ROOT` (см. [DEPLOY_YC.md](DEPLOY_YC.md) §3, схема та же) |
+| Сбой всей платформы Amvera (одно сообщение от 23.09.2026) | Для семейного приложения это допустимо. Всё собирается в Docker, бэкапы лежат во внешнем S3, поэтому поднять приложение на VPS можно за вечер |
+| SQLite на `/data` ненадёжен (этап 0) | PocketBase как Go-фреймворк с `journal_mode=DELETE` или VPS |
+
+## 9. Открытые вопросы (закрываются этапом 0)
+
+- Что физически лежит под `/data`, и как ведёт себя `singleton`.
+- Держит ли ingress долгие SSE-соединения и какой у него таймаут простоя.
+- Стабильность прокси для long polling на нашем проекте.
+- Есть ли для git-репозитория Amvera и CLI токен вместо пароля от аккаунта (нужно для деплоя из CI).
+- Отличаются ли цены в Варшаве, если туда придётся выносить бота.
+
+## Источники
+
+**Встроенный прокси** (заявления Amvera, только сниппеты):
+- https://amvera.ru/bothosting
+- https://habr.com/ru/companies/amvera/articles/1077548/, https://habr.com/ru/companies/amvera/articles/1019434/
+- https://habr.com/ru/companies/amvera/articles/820325/ — устройство перехвата, 2024
+- https://habr.com/ru/companies/amvera/news/963648/ — регион Варшава
+
+**Опыт проектов на Amvera в 2026 году** (прочитаны):
+- https://github.com/criptfarm-lang/f2b/commit/f2722c3f56f0ec266f547b2b418533f358b6665c — деградации прокси в Москве, июль–август
+- https://github.com/JamikKhidirov/AnonimBot/commit/fcfbd8bab9ea4b2ca3c55c8df5a83e1e150a1562 — таймауты и IPv4
+- https://github.com/gregoryKot/schema-telegram-botnest/commit/a844754154269b6f9549fa34d0c6a8efe0dc0e56 — ETIMEDOUT при старте, ретраи
+- https://raw.githubusercontent.com/pdkiller666/ai-hq-core/HEAD/docs/CHANGELOG.md — вебхуки в Москву не доходят, polling
+- https://raw.githubusercontent.com/Geramok/crab-rpg-bot/HEAD/README.md — свой прокси поверх встроенного
+- https://github.com/alexvi88/training_log_bot/pull/634 — сообщение о сбое всей платформы 23.09.2026
+- https://github.com/alexvi88/training_log_bot/blob/cea57b866fb00dd37000f2c1a7dd5c6b0e70b92e/db.py — SQLite и WAL на `/data`
+- https://github.com/naitfeis/onix-backend/blob/HEAD/docs/architecture/ONIX-AMVERA-PRODUCTION.md — WebSocket в Москве, env только при запуске
+- https://github.com/pdkiller666/Daily-Sales/blob/HEAD/AGENT_HANDOFF.md — перекрытие контейнеров при рестарте
+- https://github.com/PanarinI/logoped-generator/blob/HEAD/STATE.md — сбой автодеплоя из GitHub
+- https://github.com/amvera-academy/tg-id-bot, https://github.com/amvera-academy/amvera-gin-example, https://github.com/amvera-academy/amvera-nodejs-example — официальные примеры
+- https://github.com/amvera-cloud/cli — CLI
+
+**PocketBase:**
+- https://github.com/pocketbase/pocketbase/blob/master/core/db_connect.go — WAL включается жёстко
+- https://pocketbase.io/docs/going-to-production/

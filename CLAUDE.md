@@ -10,7 +10,9 @@ Telegram bot. The owner and users are in Russia. The UI language is Russian.
 
 **Current state: planning.** There's no code or build tooling yet. The source of truth for scope,
 data model, and phases is `docs/PLAN.md`. `docs/REFERENCES.md` holds competitors, OSS, and vet-care
-frequency sources. `docs/HOSTING_RU.md` holds the Russia-specific hosting analysis. Update this file's
+frequency sources. `docs/HOSTING_RU.md` holds the Russia-specific hosting analysis.
+`docs/DEPLOY_AMVERA.md` is the chosen deployment (Amvera, Moscow region). `docs/DEPLOY_YC.md` is a
+rejected Yandex Cloud option, kept as the fallback relay design. Update this file's
 Commands section once the monorepo scaffold (Phase 0 in the plan) lands.
 
 ## Workflow
@@ -34,6 +36,13 @@ pnpm-workspaces monorepo:
 - `pocketbase/`: PocketBase backend (auth, SQLite, realtime, files). Schema lives in
   `pb_migrations` and access control in API rules. Every record is scoped to the user's `household`.
 
+Deployment (docs/DEPLOY_AMVERA.md): **one Amvera project, one container.** The root `Dockerfile`
+builds web + bot, and `deploy/entrypoint.sh` runs `pocketbase serve --http=0.0.0.0:8090
+--dir=/data/pb_data` (PWA served from `pb_public`) plus the bot, which reaches PocketBase at `PB_URL`
+(default `http://127.0.0.1:8090`). `amvera.yml` must sit at the repo root (Amvera can't read it from
+elsewhere). Only `/data` persists. Env vars exist at runtime only, not at build time, so the PWA must
+call the API on its own origin and never bake an API URL into the build.
+
 Key design decisions:
 - **`nextDue` is never stored.** It's derived from `tasks.schedule` + `completions` + now + the
   household timezone. `Schedule` is a tagged union: `daily_slots` | `interval` (anchor `completion`
@@ -45,10 +54,17 @@ Key design decisions:
 
 ## Constraints
 
-- Servers in Russia often can't reach `api.telegram.org` directly. The bot must use long polling
-  (no webhooks) and read the API base URL from `TELEGRAM_API_ROOT` (grammY `client.apiRoot`) so it
-  can go through a provider proxy or a relay. Telegram is never the only login method. See
-  `docs/PLAN.md` §8.
+- Servers in Russia often can't reach `api.telegram.org` directly. On Amvera's Moscow region a
+  transparent built-in proxy handles it, but it degrades at times. So the bot must:
+  - use long polling (webhooks don't reach Moscow) and run as a single instance (a second one gets 409);
+  - leave `TELEGRAM_API_ROOT` empty by default and keep it configurable (grammY `client.apiRoot`)
+    for a fallback relay;
+  - force IPv4 (`https.Agent({ family: 4, keepAlive: true })` via `client.baseFetchConfig`, with
+    `compress: true`), and not override DNS, which could bypass the provider's interception;
+  - retry `bot.start()`/`getMe` with backoff, never crash on network errors, and mark reminders sent
+    in `reminder_log` only after Telegram confirms.
+
+  Telegram is never the only login method. See `docs/PLAN.md` §8.
 - Everything must work for users in Russia without VPN. Self-host fonts and assets, and add no
   runtime dependency on Google Fonts or foreign CDNs. Hosting must be payable with Russian cards
   (see `docs/HOSTING_RU.md`).
