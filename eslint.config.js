@@ -9,6 +9,7 @@ export default tseslint.config(
     ignores: [
       '**/dist/**',
       '**/dev-dist/**',
+      'brag-output/**',
       'pocketbase/**',
       '.pocketbase/**',
       '**/test-results/**',
