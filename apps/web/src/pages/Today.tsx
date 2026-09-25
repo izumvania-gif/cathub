@@ -8,7 +8,7 @@ import { useCompleteFlow } from '../lib/completeFlow';
 import { TaskCard } from '../components/TaskCard';
 import { Button, Empty } from '../components/ui';
 import { useBoard, type BoardItem } from '../lib/board';
-import { useCat } from '../lib/queries';
+import { useCat, useMembers } from '../lib/queries';
 import { SupplyRow, SupplySheet } from '../components/Supplies';
 import { useSupplyForecasts } from '../lib/supplies';
 
@@ -99,6 +99,8 @@ export function Today() {
   const flow = useCompleteFlow();
   const [open, setOpen] = useState<BoardItem | null>(null);
   const supplies = useSupplyForecasts();
+  const members = useMembers();
+  const nameOf = (id: string) => members.data?.find((m) => m.id === id)?.name;
   const lowSupplies = supplies.list.filter((x) => x.f.status !== 'ok');
   const [openSupply, setOpenSupply] = useState<string | null>(null);
   const selectedSupply = supplies.list.find((x) => x.supply.id === openSupply) ?? null;
@@ -136,6 +138,7 @@ export function Today() {
       tz={tz}
       onComplete={() => flow.request(i)}
       onOpen={() => setOpen(i)}
+      assignee={i.task.assignee ? nameOf(i.task.assignee) : undefined}
     />
   );
 

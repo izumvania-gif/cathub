@@ -2,6 +2,7 @@ import clsx from 'clsx';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Sheet } from '../components/Sheet';
+import { StatsCard } from '../components/StatsCard';
 import { Avatar, Button, Empty, PageHeader } from '../components/ui';
 import { useTaskActions } from '../lib/actions';
 import { useNow, useTz } from '../lib/board';
@@ -71,6 +72,7 @@ export function Journal() {
   return (
     <main className="mx-auto max-w-lg px-4 pb-28">
       <PageHeader title="Журнал" />
+      <StatsCard completions={completions.data ?? []} members={members.data ?? []} now={now} />
       <div className="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {chip('all', 'Все')}
         {(members.data ?? []).map((m) => chip(m.id, m.name || m.email))}

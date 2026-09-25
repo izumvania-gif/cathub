@@ -218,3 +218,43 @@ test('reminder_log and telegram_links are not exposed to users', async () => {
     expect([403, 404]).toContain(status);
   }
 });
+
+test('rotation: the turn passes to the next person and comes back on undo', async () => {
+  const masha = await createUser('Маша');
+  const petya = await createUser('Петя');
+  const { household } = await createHousehold(masha, [petya]);
+  const task = await createTask(masha, household.id, {
+    ...dueTodayTask('Убрать лоток'),
+    rotation: [masha.id, petya.id],
+    assignee: masha.id,
+  });
+  const assignee = async () =>
+    (
+      await api<{ assignee: string }>(
+        'GET',
+        `/api/collections/tasks/records/${task.id}`,
+        undefined,
+        masha.token,
+      )
+    ).assignee;
+  const done = (u: typeof masha) =>
+    api<{ id: string }>(
+      'POST',
+      '/api/collections/completions/records',
+      {
+        household: household.id,
+        task: task.id,
+        user: u.id,
+        done_at: new Date().toISOString().replace('T', ' '),
+        kind: 'done',
+      },
+      u.token,
+    );
+
+  await done(masha);
+  expect(await assignee()).toBe(petya.id);
+  const c = await done(petya);
+  expect(await assignee()).toBe(masha.id);
+  await api('DELETE', `/api/collections/completions/records/${c.id}`, undefined, petya.token);
+  expect(await assignee()).toBe(petya.id);
+});

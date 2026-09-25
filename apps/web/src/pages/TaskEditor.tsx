@@ -17,7 +17,7 @@ import { Button, Field, Input, Segmented, Toggle } from '../components/ui';
 import { useUser } from '../lib/auth';
 import { useTz } from '../lib/board';
 import { errorMessage, pb } from '../lib/pb';
-import { keys, useCat, useTasks } from '../lib/queries';
+import { keys, useCat, useMembers, useTasks } from '../lib/queries';
 import { todayIso } from '../lib/templates';
 import type { Task } from '../lib/types';
 
@@ -56,6 +56,9 @@ interface Draft {
   trackUnit: string;
   medical: boolean;
   notes: string;
+  who: 'anyone' | 'one' | 'rotation';
+  assignee: string;
+  rotation: string[];
 }
 
 function draftFrom(task: Task | undefined): Draft {
@@ -79,6 +82,9 @@ function draftFrom(task: Task | undefined): Draft {
     trackUnit: task?.track_value?.unit ?? 'кг',
     medical: task?.medical ?? false,
     notes: task?.notes ?? '',
+    who: task?.rotation?.length ? 'rotation' : task?.assignee ? 'one' : 'anyone',
+    assignee: task?.assignee ?? '',
+    rotation: task?.rotation ?? [],
   };
 }
 
@@ -134,6 +140,7 @@ function Editor({ task }: { task?: Task }) {
   const [, navigate] = useLocation();
   const user = useUser();
   const cat = useCat();
+  const members = useMembers();
   const tz = useTz();
   const qc = useQueryClient();
   const [d, setD] = useState<Draft>(() => draftFrom(task));
@@ -184,6 +191,16 @@ function Editor({ task }: { task?: Task }) {
           : null,
         medical: d.medical,
         notes: d.notes.trim(),
+        // Rotation starts with its first person unless the current assignee is already in it.
+        assignee:
+          d.who === 'one'
+            ? d.assignee
+            : d.who === 'rotation' && d.rotation.length
+              ? d.rotation.includes(d.assignee)
+                ? d.assignee
+                : d.rotation[0]
+              : '',
+        rotation: d.who === 'rotation' ? d.rotation : [],
       };
       if (task) await pb.collection('tasks').update(task.id, body);
       else
@@ -431,6 +448,72 @@ function Editor({ task }: { task?: Task }) {
         <p className="bg-tint rounded-2xl px-4 py-3 text-sm">
           {typeof preview === 'string' ? preview : `Итого: ${describeSchedule(preview)}`}
         </p>
+
+        <div>
+          <span className="text-ink-soft mb-1.5 block text-sm font-medium">Кто делает</span>
+          <Segmented
+            value={d.who}
+            onChange={(w) => set('who', w)}
+            options={[
+              { value: 'anyone', label: 'Любой' },
+              { value: 'one', label: 'Один' },
+              { value: 'rotation', label: 'По очереди' },
+            ]}
+          />
+          {d.who === 'one' ? (
+            <select
+              aria-label="Ответственный"
+              className="bg-card border-line mt-2 min-h-12 w-full rounded-2xl border px-3"
+              value={d.assignee}
+              onChange={(e) => set('assignee', e.target.value)}
+            >
+              <option value="">Выберите</option>
+              {(members.data ?? []).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name || m.email}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {d.who === 'rotation' ? (
+            <div className="mt-2 grid gap-1">
+              {(members.data ?? []).map((m) => {
+                const pos = d.rotation.indexOf(m.id);
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    aria-pressed={pos >= 0}
+                    onClick={() =>
+                      set(
+                        'rotation',
+                        pos >= 0 ? d.rotation.filter((x) => x !== m.id) : [...d.rotation, m.id],
+                      )
+                    }
+                    className="bg-card flex min-h-12 items-center gap-3 rounded-2xl px-4 text-left"
+                  >
+                    <span
+                      className={`flex size-7 items-center justify-center rounded-full text-sm font-bold ${pos >= 0 ? 'bg-ink text-paper' : 'border-line border-2'}`}
+                    >
+                      {pos >= 0 ? pos + 1 : ''}
+                    </span>
+                    {m.name || m.email}
+                  </button>
+                );
+              })}
+              <p className="text-ink-soft mt-1 text-xs">
+                Отметьте людей в порядке очереди. После каждой отметки дело переходит к следующему,
+                и напоминание приходит ему лично.
+              </p>
+            </div>
+          ) : (
+            <p className="text-ink-soft mt-1.5 text-xs">
+              {d.who === 'one'
+                ? 'Напоминания будут приходить только этому человеку.'
+                : 'Напоминания всем (или в семейный чат), отмечает тот, кто сделал.'}
+            </p>
+          )}
+        </div>
 
         <div className="bg-card divide-line divide-y rounded-3xl px-4">
           <Toggle

@@ -25,7 +25,9 @@ export function TaskCard({
   tz,
   onComplete,
   onOpen,
+  assignee,
 }: {
+  assignee?: string;
   item: BoardItem;
   now: Date;
   tz: string;
@@ -67,7 +69,10 @@ export function TaskCard({
               <span className={clsx('font-medium', STATUS_TEXT[ev.status])}>
                 {ev.snoozed ? 'отложено' : done ? 'сделано' : describeDue(ev, now, tz)}
               </span>
-              {last ? (
+              {assignee && !done ? (
+                <span className="text-ink-soft shrink-0">· {assignee}</span>
+              ) : null}
+              {last && !assignee ? (
                 <span className="text-ink-soft flex min-w-0 items-center gap-1 truncate">
                   · {who ? <Avatar name={who} className="size-4 text-[0.55rem]" /> : null}
                   {last.kind === 'skipped' ? 'пропуск ' : ''}

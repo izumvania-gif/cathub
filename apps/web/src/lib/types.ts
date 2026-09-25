@@ -48,6 +48,8 @@ export interface Task extends RecordModel {
   template_key: string;
   medical: boolean;
   notes: string;
+  assignee: string;
+  rotation: string[];
   archived: boolean;
   sort: number;
 }
