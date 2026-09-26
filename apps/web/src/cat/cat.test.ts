@@ -14,6 +14,9 @@ function seeded(seed = 1) {
 
 describe('sprite', () => {
   it('every frame of every animation fits the frame with a margin and is not empty', () => {
+    // Collected and checked once: an expect() per pixel made this test slow.
+    const touching: string[] = [];
+    const sparse: string[] = [];
     for (const p of PRESETS) {
       for (const a of Object.keys(ANIMS) as Anim[]) {
         for (let i = 0; i < ANIMS[a].frames; i++) {
@@ -24,14 +27,15 @@ describe('sprite', () => {
               if (!px[(y * FRAME_W + x) * 4 + 3]) continue;
               filled++;
               // Nothing touches the frame edges (the cat would look cut off).
-              expect(x > 0 && x < FRAME_W - 1 && y > 0, `${p.key} ${a}#${i} at ${x},${y}`).toBe(
-                true,
-              );
+              if (!(x > 0 && x < FRAME_W - 1 && y > 0))
+                touching.push(`${p.key} ${a}#${i} at ${x},${y}`);
             }
-          expect(filled).toBeGreaterThan(150);
+          if (filled <= 150) sparse.push(`${p.key} ${a}#${i}: ${filled}`);
         }
       }
     }
+    expect(touching).toEqual([]);
+    expect(sparse).toEqual([]);
   });
 
   it('any random look renders', () => {
