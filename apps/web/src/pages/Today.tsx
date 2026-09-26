@@ -1,5 +1,5 @@
 import { describeWhen, type Evaluation } from '@cathub/core';
-import { AnimatePresence, LayoutGroup } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
 import { useState } from 'react';
 import { Link } from 'wouter';
 import { MOOD_LABELS } from '../cat/behavior';
@@ -293,28 +293,26 @@ export function Today() {
               </ul>
             </section>
           ) : null}
-          <LayoutGroup>
-            {now_.length ? (
-              <Section title="Сейчас" count={now_.length}>
-                {now_.map(card)}
-              </Section>
-            ) : null}
-            {soon.length ? (
-              <Section title="Скоро" count={soon.length}>
-                {soon.map(card)}
-              </Section>
-            ) : null}
-            {done.length ? (
-              <Section title="Сделано" count={done.length}>
-                {done.map(card)}
-              </Section>
-            ) : null}
-            {later.length ? (
-              <Section title="На неделе" count={later.length}>
-                {later.map(card)}
-              </Section>
-            ) : null}
-          </LayoutGroup>
+          {now_.length ? (
+            <Section title="Сейчас" count={now_.length}>
+              {now_.map(card)}
+            </Section>
+          ) : null}
+          {soon.length ? (
+            <Section title="Скоро" count={soon.length}>
+              {soon.map(card)}
+            </Section>
+          ) : null}
+          {done.length ? (
+            <Section title="Сделано" count={done.length}>
+              {done.map(card)}
+            </Section>
+          ) : null}
+          {later.length ? (
+            <Section title="На неделе" count={later.length}>
+              {later.map(card)}
+            </Section>
+          ) : null}
           {!now_.length && !soon.length && !later.length ? (
             <div className="mt-8 flex flex-col items-center text-center">
               <SleepyCat />
