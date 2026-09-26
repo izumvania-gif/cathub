@@ -33,7 +33,22 @@ describe('fishing', () => {
     }
   });
 
-  it('tapping nonstop earns little: a miss rests the paw', () => {
+  it('a person with a normal reaction catches plenty', () => {
+    for (const seed of [11, 12, 13]) {
+      // Taps 0.1–0.25 s after a fish touches the window, and sometimes just misses.
+      let wait = -1;
+      let k = 0;
+      const s = play(seed, (s) => {
+        const f = inBand(s);
+        if (!f || f.kind === 'ruff') return ((wait = -1), false);
+        if (wait < 0) wait = 6 + ((seed * 7 + ++k * 13) % 9);
+        return --wait === 0;
+      });
+      expect(s.caught, `seed ${seed}`).toBeGreaterThanOrEqual(20);
+    }
+  });
+
+  it('tapping nonstop earns little: every miss costs time', () => {
     for (const seed of [7, 8, 9]) {
       let k = 0;
       const s = play(seed, () => ++k % 15 === 0); // four taps a second

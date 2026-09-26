@@ -3,13 +3,20 @@ import { rng, type Rand } from '../engine';
 /**
  * «Рыбалка»: fish swim across the aquarium; a tap catches the fish inside the paw band in the
  * middle. Catches in a row raise the multiplier; a tap on nothing or on the spiky ruff breaks
- * the streak. Pure logic, no DOM.
+ * the streak and costs 2.5 s off the clock. Pure logic, no DOM.
  */
 export const W = 96;
 export const DURATION = 45;
-export const BAND = 8; // half-width of the paw band
-/** After a miss the paw rests: taps are ignored for this long (no point in tapping nonstop). */
-export const TIRED = 1.5;
+export const BAND = 8; // half-width of the paw band as drawn
+/** A fish counts as soon as its body touches the band (more forgiving than the drawing). */
+export const CATCH = BAND + 3;
+/** A fish this close counts as a near miss (only the message differs). */
+const NEAR = BAND + 16;
+/**
+ * A miss costs time off the clock instead of locking the paw: the paw always answers, and
+ * tapping nonstop just burns the 45 seconds.
+ */
+export const MISS_PENALTY = 2.5;
 const MAX_MULT = 4;
 
 export type FishKind = 'fish' | 'gold' | 'ruff';
@@ -44,8 +51,10 @@ export interface State {
   bestStreak: number;
   /** Seconds since the last swipe (for the paw animation). */
   paw: number;
-  /** Seconds the paw still rests after a miss. */
-  tired: number;
+  /** Seconds the cat still sulks after a miss (looks only; taps are never blocked). */
+  sulk: number;
+  /** Misses in a row. */
+  misses: number;
   pops: Pop[];
   over: boolean;
   rand: Rand;
@@ -65,7 +74,8 @@ export function init(seed: number, h: number): State {
     streak: 0,
     bestStreak: 0,
     paw: 9,
-    tired: 0,
+    sulk: 0,
+    misses: 0,
     pops: [],
     over: false,
     rand: rng(seed),
@@ -101,7 +111,7 @@ export function step(s: State, dt: number) {
   if (s.over) return;
   s.t += dt;
   s.paw += dt;
-  s.tired = Math.max(0, s.tired - dt);
+  s.sulk = Math.max(0, s.sulk - dt);
   if (s.t >= DURATION) {
     s.over = true;
     return;
@@ -119,29 +129,42 @@ export function step(s: State, dt: number) {
 /** Fish inside the paw band, nearest to the middle first. */
 export function inBand(s: State): Fish | undefined {
   return s.fish
-    .filter((f) => f.caught === null && Math.abs(f.x - W / 2) <= BAND)
+    .filter((f) => f.caught === null && Math.abs(f.x - W / 2) <= CATCH)
     .sort((a, b) => Math.abs(a.x - W / 2) - Math.abs(b.x - W / 2))[0];
 }
 
-export type TapResult = 'catch' | 'gold' | 'ruff' | 'miss' | 'tired';
+export type TapResult = 'catch' | 'gold' | 'ruff' | 'near' | 'miss';
 
 export function tap(s: State): TapResult {
-  if (s.over || s.tired > 0) return 'tired';
+  if (s.over) return 'miss';
   s.paw = 0;
   const f = inBand(s);
   if (!f) {
     s.streak = 0;
-    s.tired = TIRED;
-    s.pops.push({ x: W / 2, y: swimBottom(s.h), text: 'мимо', t: 0 });
-    return 'miss';
+    const near = s.fish.some(
+      (g) => g.caught === null && g.kind !== 'ruff' && Math.abs(g.x - W / 2) <= NEAR,
+    );
+    s.t += MISS_PENALTY;
+    s.misses += 1;
+    s.sulk = 0.5;
+    s.pops.push({
+      x: W / 2,
+      y: swimBottom(s.h),
+      text: near ? 'чуть-чуть, −1,5 с' : '−1,5 с',
+      t: 0,
+    });
+    return near ? 'near' : 'miss';
   }
   f.caught = 0;
   if (f.kind === 'ruff') {
     s.streak = 0;
-    s.tired = TIRED;
-    s.pops.push({ x: f.x, y: f.y, text: 'ай!', t: 0 });
+    s.t += MISS_PENALTY;
+    s.misses += 1;
+    s.sulk = 0.5;
+    s.pops.push({ x: f.x, y: f.y, text: 'ай! −1,5 с', t: 0 });
     return 'ruff';
   }
+  s.misses = 0;
   const gain = BASE[f.kind] * multiplier(s.streak);
   s.score += gain;
   s.caught += 1;

@@ -247,6 +247,8 @@ export interface Enemy {
 export interface Fight {
   enemy: Enemy;
   hand: CardKey[];
+  /** Stable ids for the cards in hand, so the UI can animate them without re-keying. */
+  handIds: number[];
   draw: CardKey[];
   discard: CardKey[];
   exhausted: CardKey[];
@@ -269,6 +271,8 @@ export interface Run {
   hp: number;
   maxHp: number;
   deck: CardKey[];
+  /** Next id for a drawn card. */
+  nextCard?: number;
   relics: RelicKey[];
   fight: Fight | null;
   reward: CardKey[];
@@ -354,6 +358,7 @@ function startFight(r: Run) {
   r.fight = {
     enemy: { key, hp: max, max, block: 0, str: 0, weak: 0, turn: 0, scale },
     hand: [],
+    handIds: [],
     draw: shuffle(r, r.deck),
     discard: [],
     exhausted: [],
@@ -376,6 +381,8 @@ function drawCards(r: Run, n: number) {
       f.discard = [];
     }
     f.hand.push(f.draw.pop()!);
+    r.nextCard = (r.nextCard ?? 0) + 1;
+    f.handIds.push(r.nextCard);
   }
 }
 
@@ -412,6 +419,7 @@ export function playCard(r: Run, i: number): boolean {
   const c = CARDS[key];
   f.energy -= c.cost;
   f.hand.splice(i, 1);
+  f.handIds.splice(i, 1);
   if (c.block) f.block += c.block;
   if (c.slam) hitEnemy(r, dealt(f.block, 0, f.weak > 0));
   if (c.dmg) for (let k = 0; k < (c.hits ?? 1); k++) hitEnemy(r, dealt(c.dmg, f.str, f.weak > 0));
@@ -429,6 +437,7 @@ export function endTurn(r: Run) {
   const f = r.fight!;
   f.discard.push(...f.hand);
   f.hand = [];
+  f.handIds = [];
   // The enemy acts.
   const e = f.enemy;
   e.block = 0;

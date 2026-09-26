@@ -1,6 +1,18 @@
 import { plausible } from '@cathub/core';
 import { describe, expect, it } from 'vitest';
-import { HELPERS, init, moveCat, place, ROWS, SLOTS, stats, step, type State } from './logic';
+import {
+  HELPERS,
+  init,
+  moveCat,
+  place,
+  ROWS,
+  rowAt,
+  rowY,
+  SLOTS,
+  stats,
+  step,
+  type State,
+} from './logic';
 
 const DT = 1 / 60;
 
@@ -52,5 +64,18 @@ describe('defense', () => {
     for (let i = 0; i < SLOTS.length; i++) expect(place(s, 'post', 0)).toBe(true);
     expect(place(s, 'post', 0)).toBe(false);
     expect(s.cheese).toBe(100 - 3 * HELPERS.post.cost);
+  });
+
+  it('a helper goes to the free cell nearest the tap, and taps map to the drawn shelves', () => {
+    const s = init(1, 180);
+    s.cheese = 100;
+    expect(place(s, 'post', 1, SLOTS[2]! + 3)).toBe(true);
+    expect(s.helpers.at(-1)!.slot).toBe(2);
+    expect(place(s, 'post', 1, SLOTS[2]!)).toBe(true); // taken: the nearest free one
+    expect(s.helpers.at(-1)!.slot).toBe(1);
+    for (let r = 0; r < ROWS; r++) {
+      expect(rowAt(180, rowY(180, r) - 1)).toBe(r); // just above the board
+      expect(rowAt(180, rowY(180, r) - 20)).toBe(r); // high above it, still that shelf
+    }
   });
 });

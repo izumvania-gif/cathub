@@ -94,8 +94,10 @@ export function useLoop(update: (dt: number) => void, draw: () => void, running:
   });
   useEffect(() => {
     if (!running) {
+      // Paused or counting down: keep the scene on screen (a few frames a second is plenty).
       cb.current.draw();
-      return;
+      const id = setInterval(() => cb.current.draw(), 150);
+      return () => clearInterval(id);
     }
     let raf = 0;
     let last = performance.now();

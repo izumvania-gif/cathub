@@ -81,6 +81,8 @@ export interface State {
   cheese: number;
   cheeseT: number;
   food: number;
+  /** Seconds since a mouse last reached the bowl, per row (for a red flash). */
+  bitten: number[];
   caught: number;
   nextId: number;
   over: boolean;
@@ -106,6 +108,7 @@ export function init(seed: number, h: number): State {
     cheese: 3,
     cheeseT: 0,
     food: START_FOOD,
+    bitten: [9, 9, 9],
     caught: 0,
     nextId: 1,
     over: false,
@@ -161,6 +164,7 @@ export function step(s: State, dt: number) {
   s.events = [];
   s.t += dt;
   s.phaseT += dt;
+  s.bitten = s.bitten.map((b) => b + dt);
   const c = s.cat;
   c.leap = Math.min(LEAP, c.leap + dt);
   c.cool -= dt;
@@ -265,6 +269,7 @@ export function step(s: State, dt: number) {
     if (m.hp > 0 && m.x < 4) {
       m.hp = 0;
       s.food = Math.max(0, s.food - MOUSE[m.kind].bite);
+      s.bitten[m.row] = 0;
       s.events.push('bite');
     }
   s.mice = s.mice.filter((m) => m.hp > 0 || m.hurt < 0.25);
@@ -294,15 +299,33 @@ export function moveCat(s: State, row: number) {
   s.cat.leap = 0;
 }
 
-/** Puts a helper in the row's free cell nearest the cat (a yarn ball rolls at once). */
-export function place(s: State, kind: HelperKind, row: number): boolean {
+/** Free cells of a row (indexes into SLOTS). */
+export const freeSlots = (s: State, row: number) => {
+  const taken = new Set(s.helpers.filter((h) => h.row === row).map((h) => h.slot));
+  return SLOTS.map((_, i) => i).filter((i) => !taken.has(i));
+};
+
+/** The row whose shelf space contains world y (taps anywhere above a shelf count for it). */
+export function rowAt(h: number, y: number) {
+  for (let r = 0; r < ROWS; r++) if (y <= rowY(h, r) + 3) return r;
+  return ROWS - 1;
+}
+
+/**
+ * Puts a helper in a row: in the free cell nearest `x` (where the player tapped), or the one
+ * nearest the cat. A yarn ball rolls at once.
+ */
+export function place(s: State, kind: HelperKind, row: number, x?: number): boolean {
   if (s.over || s.cheese < HELPERS[kind].cost) return false;
   if (kind === 'yarn') {
     s.yarns.push({ id: s.nextId++, row, x: CAT_X + 10, hit: [] });
   } else {
-    const taken = new Set(s.helpers.filter((h) => h.row === row).map((h) => h.slot));
-    const slot = SLOTS.findIndex((_, i) => !taken.has(i));
-    if (slot < 0) return false;
+    const free = freeSlots(s, row);
+    if (!free.length) return false;
+    const slot =
+      x === undefined
+        ? free[0]!
+        : free.reduce((a, b) => (Math.abs(SLOTS[b]! - x) < Math.abs(SLOTS[a]! - x) ? b : a));
     s.helpers.push({ id: s.nextId++, row, slot, kind, hp: HELPERS[kind].hp, cool: 0, swipe: 9 });
   }
   s.cheese -= HELPERS[kind].cost;

@@ -78,6 +78,7 @@ export function Jump({ look, seed, paused, onEnd }: GameProps) {
   const stage = useStage(canvas, W, { minH: 180, maxH: 260 });
   const game = useRef<State | null>(null);
   const ended = useRef(false);
+  // Touch: the cat heads for the finger (world x per pointer). Keys and tilt steer directly.
   const input = useRef({ touch: new Map<number, number>(), keys: 0, tilt: 0 });
   const sprites = useMemo(() => art(), []);
   const [hud, setHud] = useState({ score: 0, climb: 0 });
@@ -128,8 +129,14 @@ export function Jump({ look, seed, paused, onEnd }: GameProps) {
       input.current.tilt = 0;
       return;
     }
+    // The way the phone is held when tilt is switched on counts as "straight".
+    let base: number | null = null;
     const on = (e: DeviceOrientationEvent) => {
-      input.current.tilt = Math.max(-1, Math.min(1, (e.gamma ?? 0) / 18));
+      const g = e.gamma ?? 0;
+      base ??= g;
+      const d = g - base;
+      input.current.tilt =
+        Math.abs(d) < 2 ? 0 : Math.max(-1, Math.min(1, (d - Math.sign(d) * 2) / 12));
     };
     window.addEventListener('deviceorientation', on);
     return () => window.removeEventListener('deviceorientation', on);
@@ -153,8 +160,11 @@ export function Jump({ look, seed, paused, onEnd }: GameProps) {
 
   const steering = () => {
     const i = input.current;
+    const s = game.current;
     let touch = 0;
-    for (const v of i.touch.values()) touch += v;
+    // The newest finger wins; the speed eases off as the cat gets under it (no overshoot).
+    const finger = [...i.touch.values()].at(-1);
+    if (finger !== undefined && s) touch = Math.max(-1, Math.min(1, (finger - s.x) / 10));
     return Math.max(-1, Math.min(1, touch + i.keys + i.tilt));
   };
 
@@ -232,15 +242,27 @@ export function Jump({ look, seed, paused, onEnd }: GameProps) {
       if (s.nip > 0)
         for (let i = 0; i < 3; i++)
           px(ctx, s.x - 6 + i * 6, s.y - cam + 2 + ((s.t * 40 + i * 5) % 8), 2, 2, '#7fd4a8');
+      // Where the finger is steering to.
+      const finger = [...input.current.touch.values()].at(-1);
+      if (finger !== undefined) {
+        ctx.globalAlpha = 0.5;
+        px(ctx, finger - 3, h - 4, 7, 1, '#23264f');
+        px(ctx, finger - 2, h - 5, 5, 1, '#23264f');
+        px(ctx, finger - 1, h - 6, 3, 1, '#23264f');
+        px(ctx, finger, h - 7, 1, 1, '#23264f');
+        ctx.globalAlpha = 1;
+      }
       end(ctx);
     },
     !paused && Boolean(stage),
   );
 
   const touch = (e: React.PointerEvent<HTMLDivElement>, on: boolean) => {
+    if (!on || !stage) return void input.current.touch.delete(e.pointerId);
     const box = e.currentTarget.getBoundingClientRect();
-    if (on) input.current.touch.set(e.pointerId, e.clientX < box.left + box.width / 2 ? -1 : 1);
-    else input.current.touch.delete(e.pointerId);
+    const dpr = e.currentTarget.querySelector('canvas')!.width / box.width;
+    const x = ((e.clientX - box.left) * dpr - stage.ox) / stage.scale;
+    input.current.touch.set(e.pointerId, Math.max(0, Math.min(W, x)));
   };
 
   return (

@@ -7,8 +7,10 @@ import {
   CAT_X,
   HELPERS,
   init,
+  freeSlots,
   moveCat,
   place,
+  rowAt,
   ROWS,
   rowY,
   SLOTS,
@@ -112,13 +114,27 @@ export function Defense({ look, seed, paused, onEnd }: GameProps) {
     game.current.h = stage.h;
   }, [stage, seed]);
 
-  const choose = (row: number) => {
+  const choose = (row: number, x?: number) => {
     const s = game.current;
     if (!s || paused || s.over) return;
     if (armed) {
-      if (place(s, armed, row)) setArmed(null);
-      else sfx('bad');
+      if (place(s, armed, row, x)) setArmed(null);
+      else {
+        sfx('bad');
+        navigator.vibrate?.(30);
+      }
     } else moveCat(s, row);
+  };
+
+  /** A tap on the kitchen: which shelf (and where on it) in world pixels. */
+  const tapAt = (e: React.PointerEvent<HTMLDivElement>) => {
+    const c = canvas.current;
+    if (!c || !stage) return;
+    const box = c.getBoundingClientRect();
+    const dpr = c.width / box.width;
+    const x = ((e.clientX - box.left) * dpr - stage.ox) / stage.scale;
+    const y = ((e.clientY - box.top) * dpr - stage.oy) / stage.scale;
+    choose(rowAt(stage.h, y), x);
   };
 
   useEffect(() => {
@@ -183,18 +199,40 @@ export function Defense({ look, seed, paused, onEnd }: GameProps) {
         for (let x = (y / 10) % 2 ? 5 : 0; x < W; x += 10) px(ctx, x, y, 9, 9, '#f6f2e9');
       for (let r = 0; r < ROWS; r++) {
         const fy = rowY(h, r);
-        const armedRow = armed !== null;
-        if (armedRow) {
-          ctx.globalAlpha = 0.12;
-          px(ctx, 0, fy - 30, W, 30, '#4a4fc4');
+        const top = r === 0 ? 0 : rowY(h, r - 1) + 4;
+        // The cat's shelf is lit; a shelf flashes red when a mouse reaches the bowl.
+        if (r === s.cat.row && !armed) {
+          ctx.globalAlpha = 0.08;
+          px(ctx, 0, top, W, fy - top, '#f5b62e');
+          ctx.globalAlpha = 1;
+        }
+        if (s.bitten[r]! < 0.4) {
+          ctx.globalAlpha = 0.25 * (1 - s.bitten[r]! / 0.4);
+          px(ctx, 0, top, W, fy - top, '#e2563a');
           ctx.globalAlpha = 1;
         }
         // Shelf board and the bowl at its left end.
         px(ctx, 0, fy, W, 2, '#b98552');
         px(ctx, 0, fy + 2, W, 2, '#8f623a');
         ctx.drawImage(sprites.bowl, 1, fy - 3);
-        // Empty cells for helpers.
-        for (const x of SLOTS) px(ctx, x - 4, fy - 1, 8, 1, '#d8c7a6');
+        // Empty cells for helpers; with a helper chosen, the free ones are outlined.
+        const free = armed && armed !== 'yarn' ? new Set(freeSlots(s, r)) : null;
+        SLOTS.forEach((x, i) => {
+          px(ctx, x - 4, fy - 1, 8, 1, '#d8c7a6');
+          if (free?.has(i)) {
+            ctx.globalAlpha = 0.18;
+            px(ctx, x - 4, fy - 12, 8, 11, '#4a4fc4');
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = '#4a4fc4';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x - 4.5, fy - 12.5, 9, 12);
+          }
+        });
+        if (armed === 'yarn') {
+          ctx.globalAlpha = 0.6;
+          for (const dx of [8, 13, 18]) px(ctx, CAT_X + dx, fy - 4, 3, 1, '#e85d9c');
+          ctx.globalAlpha = 1;
+        }
       }
       // Helpers.
       for (const hp of s.helpers) {
@@ -267,27 +305,21 @@ export function Defense({ look, seed, paused, onEnd }: GameProps) {
           role="img"
           aria-label="Кухня с тремя полками: коснитесь полки, чтобы кот прыгнул туда"
         />
-        {/* Tap targets: one per row. */}
-        {stage ? (
-          <div
-            className="absolute inset-0 grid"
-            style={{ gridTemplateRows: `repeat(${ROWS}, 1fr)` }}
-          >
-            {Array.from({ length: ROWS }, (_, r) => (
-              <button
-                key={r}
-                type="button"
-                aria-label={armed ? `Поставить на полку ${r + 1}` : `Кот на полку ${r + 1}`}
-                className="focus-visible:bg-ink/5 outline-none"
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  choose(r);
-                }}
-                onClick={(e) => e.detail === 0 && choose(r)}
-              />
-            ))}
-          </div>
-        ) : null}
+        {/* Taps map to the drawn shelves; the buttons are for keyboards and screen readers. */}
+        <div
+          className="absolute inset-0"
+          onPointerDown={(e) => {
+            e.preventDefault();
+            tapAt(e);
+          }}
+        />
+        <div className="sr-only">
+          {Array.from({ length: ROWS }, (_, r) => (
+            <button key={r} type="button" onClick={() => choose(r)}>
+              {armed ? `Поставить на полку ${r + 1}` : `Кот на полку ${r + 1}`}
+            </button>
+          ))}
+        </div>
         {hud.banner ? (
           <p
             aria-live="polite"
@@ -319,7 +351,11 @@ export function Defense({ look, seed, paused, onEnd }: GameProps) {
         })}
       </div>
       <p className="text-ink-soft px-4 pb-2 text-center text-xs">
-        {armed ? 'Коснись полки, куда поставить' : 'Касание полки: кот прыгает туда'}
+        {armed === 'yarn'
+          ? 'Коснись полки: клубок покатится по ней'
+          : armed
+            ? 'Коснись свободной клетки в рамке. Ещё раз на кнопку: отмена'
+            : 'Касание полки: кот прыгает туда и ловит мышей сам'}
       </p>
     </div>
   );

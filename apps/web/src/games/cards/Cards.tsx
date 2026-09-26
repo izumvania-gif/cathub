@@ -35,7 +35,14 @@ const SAVE_KEY = 'cathub.cards.run';
 function load(seed: number): Run {
   try {
     const saved = JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null') as Run | null;
-    if (saved && saved.version === 1 && saved.phase !== 'over') return saved;
+    if (saved && saved.version === 1 && saved.phase !== 'over') {
+      // Saves from before cards had ids.
+      if (saved.fight && !saved.fight.handIds) {
+        saved.fight.handIds = saved.fight.hand.map((_, i) => i + 1);
+        saved.nextCard = saved.fight.hand.length;
+      }
+      return saved;
+    }
   } catch {
     /* broken save: start over */
   }
@@ -180,6 +187,19 @@ export function Cards({ look, seed, paused, onEnd }: GameProps) {
     calm.current = setTimeout(() => setCatAnim('sit'), 400);
   };
 
+  // Damage and healing numbers that float up from the cat and the enemy.
+  const [floats, setFloats] = useState<Array<{ id: number; who: 'cat' | 'enemy'; text: string }>>(
+    [],
+  );
+  const floatId = useRef(0);
+  const float = (who: 'cat' | 'enemy', text: string) => {
+    const id = ++floatId.current;
+    setFloats((xs) => [...xs, { id, who, text }]);
+    setTimeout(() => setFloats((xs) => xs.filter((x) => x.id !== id)), 900);
+  };
+  // A card slides under the finger after a play; ignore a second tap that lands too soon.
+  const lock = useRef(0);
+
   const act = (fn: (r: Run) => void) =>
     setRun((r) => {
       const next = structuredClone(r);
@@ -204,12 +224,19 @@ export function Cards({ look, seed, paused, onEnd }: GameProps) {
       sfx('hit');
       navigator.vibrate?.(15);
       flash('grumpy');
-    }
-    const e0 = p.fight?.enemy.hp ?? 0;
-    const e1 = run.fight?.enemy.hp ?? 0;
-    if (run.fight && p.fight && e1 < e0) {
-      sfx('paw');
-      flash('bat');
+      float('cat', `−${p.hp - run.hp}`);
+    } else if (run.hp > p.hp && run.phase === 'fight') float('cat', `+${run.hp - p.hp}`);
+    const e0 = p.fight?.enemy;
+    const e1 = run.fight?.enemy;
+    if (e0 && e1) {
+      if (e1.hp < e0.hp) {
+        sfx('paw');
+        flash('bat');
+        float('enemy', `−${e0.hp - e1.hp}`);
+      } else if (e1.block < e0.block && run.fight!.turn === p.fight!.turn) {
+        sfx('block');
+        float('enemy', '🛡️');
+      }
     }
     if (p.phase === 'fight' && run.phase === 'reward') sfx('win');
     try {
@@ -228,6 +255,7 @@ export function Cards({ look, seed, paused, onEnd }: GameProps) {
   const f = run.fight;
   const enemy = f?.enemy;
   const intent = enemy ? intentText(intentOf(enemy)) : null;
+  const stuck = Boolean(f && f.hand.every((_, i) => !canPlay(run, i)));
 
   return (
     <div className="absolute inset-0 flex flex-col overflow-y-auto px-3 pb-3">
@@ -256,14 +284,16 @@ export function Cards({ look, seed, paused, onEnd }: GameProps) {
         <div className="flex flex-1 flex-col">
           <section className="bg-card shadow-card rounded-3xl p-3" aria-label="Бой">
             <div className="flex items-end justify-between gap-2">
-              <div className="flex flex-col items-center">
+              <div className="relative flex flex-col items-center">
+                <Floats list={floats.filter((x) => x.who === 'cat')} />
                 <CatSprite look={look} anim={catAnim} scale={3} />
                 <span className="text-xs font-semibold tabular-nums">
                   {f.block ? `🛡️ ${f.block}` : ' '}
                   {f.weak ? ' 😵' : ''}
                 </span>
               </div>
-              <div className="flex flex-col items-center">
+              <div className="relative flex flex-col items-center">
+                <Floats list={floats.filter((x) => x.who === 'enemy')} />
                 <span
                   className="bg-tint mb-1 rounded-full px-2.5 py-1 text-sm font-bold tabular-nums"
                   aria-label={`Следующий ход: ${ENEMIES[enemy.key].title} ${intent.label}`}
@@ -310,7 +340,7 @@ export function Cards({ look, seed, paused, onEnd }: GameProps) {
             <AnimatePresence initial={false}>
               {f.hand.map((c, i) => (
                 <motion.li
-                  key={`${f.turn}-${i}-${c}`}
+                  key={f.handIds[i] ?? `${f.turn}-${i}`}
                   layout
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -320,8 +350,16 @@ export function Cards({ look, seed, paused, onEnd }: GameProps) {
                     card={c}
                     disabled={paused || !canPlay(run, i)}
                     onClick={() => {
+                      const now = performance.now();
+                      if (now < lock.current) return;
+                      lock.current = now + 220;
+                      const id = f.handIds[i];
                       sfx('card');
-                      act((r) => playCard(r, i));
+                      // Play by id: the hand may have changed since this render.
+                      act((r) => {
+                        const at = r.fight ? r.fight.handIds.indexOf(id!) : -1;
+                        if (at >= 0) playCard(r, at);
+                      });
                     }}
                   />
                 </motion.li>
@@ -332,8 +370,17 @@ export function Cards({ look, seed, paused, onEnd }: GameProps) {
             <span className="text-ink-soft text-xs tabular-nums">
               Колода {f.draw.length} · сброс {f.discard.length}
             </span>
-            <Button className="flex-1" disabled={paused} onClick={() => act(endTurn)}>
-              Конец хода
+            <Button
+              className={clsx('flex-1', stuck && 'ring-amber ring-4')}
+              disabled={paused}
+              onClick={() => {
+                const now = performance.now();
+                if (now < lock.current) return;
+                lock.current = now + 300;
+                act(endTurn);
+              }}
+            >
+              {stuck ? 'Конец хода: больше нечем' : 'Конец хода'}
             </Button>
           </div>
         </div>
@@ -448,6 +495,33 @@ export function Cards({ look, seed, paused, onEnd }: GameProps) {
         </Panel>
       ) : null}
     </div>
+  );
+}
+
+function Floats({ list }: { list: Array<{ id: number; text: string }> }) {
+  return (
+    <span
+      aria-hidden
+      className="pointer-events-none absolute inset-x-0 top-1/2 z-10 flex justify-center"
+    >
+      <AnimatePresence>
+        {list.map((x) => (
+          <motion.span
+            key={x.id}
+            className={clsx(
+              'font-display absolute text-2xl font-bold [text-shadow:0_0_3px_var(--card),0_0_6px_var(--card)]',
+              x.text.startsWith('+') ? 'text-mint-ink' : 'text-tomato-ink',
+            )}
+            initial={{ y: 0, opacity: 0, scale: 0.7 }}
+            animate={{ y: -28, opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+          >
+            {x.text}
+          </motion.span>
+        ))}
+      </AnimatePresence>
+    </span>
   );
 }
 

@@ -60,9 +60,16 @@ export function Fishing({ look, seed, paused, onEnd }: GameProps) {
     const s = game.current;
     if (!s || paused || s.over) return;
     const r = tap(s);
-    if (r === 'tired') return;
-    sfx(r === 'miss' ? 'miss' : r === 'ruff' ? 'bad' : r === 'gold' ? 'coin' : 'catch');
-    if (r !== 'miss') navigator.vibrate?.(8);
+    sfx(
+      r === 'miss' || r === 'near'
+        ? 'miss'
+        : r === 'ruff'
+          ? 'bad'
+          : r === 'gold'
+            ? 'coin'
+            : 'catch',
+    );
+    navigator.vibrate?.(r === 'catch' || r === 'gold' ? 8 : 25);
   };
 
   useEffect(() => {
@@ -123,8 +130,8 @@ export function Fishing({ look, seed, paused, onEnd }: GameProps) {
         const y = h - 20 - (((s.t * 18 + i * 37) % (h - 20)) | 0);
         px(ctx, 22 + i * 10 + Math.round(Math.sin(s.t * 2 + i) * 2), y, 1, 1, '#f3fbfe');
       }
-      // The paw band (dim while the paw rests after a miss).
-      ctx.globalAlpha = s.tired > 0 ? 0.08 : 0.28;
+      // The paw band (dim for a moment after a miss).
+      ctx.globalAlpha = s.sulk > 0 ? 0.12 : 0.28;
       px(ctx, W / 2 - BAND, 3, BAND * 2, swimBottom(h) + 8, '#ffffff');
       ctx.globalAlpha = 1;
       px(ctx, W / 2 - BAND, 3, 1, swimBottom(h) + 8, '#ffffff');
@@ -136,7 +143,7 @@ export function Fishing({ look, seed, paused, onEnd }: GameProps) {
       drawCat(
         ctx,
         look,
-        swiping ? 'bat' : s.tired > 0 ? 'grumpy' : 'watch',
+        swiping ? 'bat' : s.sulk > 0 ? 'grumpy' : 'watch',
         swiping ? s.paw : s.t,
         W / 2 - 8,
         h - 6,

@@ -19,7 +19,8 @@ import { useFinishGame, useGameFishLeft, useGameRecords, type FinishResult } fro
 import { useUser } from '../lib/auth';
 import { errorMessage } from '../lib/pb';
 
-type Phase = 'intro' | 'play' | 'result';
+/** ready: a 3-2-1 before real-time games; ending: a beat to see how the run ended. */
+type Phase = 'intro' | 'ready' | 'play' | 'ending' | 'result';
 
 const isGame = (k: string): k is GameKey => k in GAME_INFO;
 
@@ -39,6 +40,7 @@ function PlayGame({ game }: { game: GameKey }) {
   const [phase, setPhase] = useState<Phase>('intro');
   const [seed, setSeed] = useState(() => Date.now() % 1_000_000);
   const [paused, setPaused] = useState(false);
+  const [count, setCount] = useState(3);
   const [score, setScore] = useState(0);
   const [result, setResult] = useState<FinishResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -57,12 +59,40 @@ function PlayGame({ game }: { game: GameKey }) {
     setResult(null);
     setError(null);
     setPaused(false);
-    setPhase('play');
+    setCount(3);
+    // Turn-based cards need no countdown.
+    setPhase(game === 'cards' ? 'play' : 'ready');
   };
+
+  // 3, 2, 1, go.
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    const t = setTimeout(() => {
+      if (count > 1) {
+        setCount(count - 1);
+        sfx('card');
+      } else {
+        setPhase('play');
+        sfx('coin');
+      }
+    }, 550);
+    return () => clearTimeout(t);
+  }, [phase, count]);
+
+  // Escape or P pauses a running game.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (phase === 'play' && (e.code === 'Escape' || e.code === 'KeyP')) setPaused((p) => !p);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [phase]);
 
   const onEnd = useCallback(
     (stats: Record<string, number>, activeMs: number) => {
-      setPhase('result');
+      // Let the last moment sink in before the result card.
+      setPhase('ending');
+      setTimeout(() => setPhase((p) => (p === 'ending' ? 'result' : p)), 900);
       setScore(Math.round(stats.score ?? 0));
       finish(game, stats, activeMs)
         .then((r) => {
@@ -76,9 +106,10 @@ function PlayGame({ game }: { game: GameKey }) {
 
   return (
     <div
-      className="bg-paper fixed inset-0 z-50 flex flex-col"
+      className="bg-paper fixed inset-0 z-50 flex flex-col overscroll-none select-none [-webkit-touch-callout:none]"
       role="dialog"
       aria-label={info.title}
+      onContextMenu={(e) => e.preventDefault()}
     >
       <header className="flex items-center gap-1 px-2 pt-[max(env(safe-area-inset-top),0.5rem)] pb-1">
         <Link
@@ -154,6 +185,27 @@ function PlayGame({ game }: { game: GameKey }) {
                 Играть
               </Button>
             </Overlay>
+          ) : null}
+
+          {phase === 'ready' ? (
+            <motion.div
+              key="ready"
+              className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              aria-live="assertive"
+            >
+              <motion.span
+                key={count}
+                className="bg-card shadow-lift font-display flex size-28 items-center justify-center rounded-full text-6xl font-semibold"
+                initial={{ scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 500, damping: 26 }}
+              >
+                {count}
+              </motion.span>
+            </motion.div>
           ) : null}
 
           {phase === 'play' && paused ? (

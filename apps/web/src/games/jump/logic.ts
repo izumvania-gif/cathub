@@ -162,7 +162,7 @@ export function step(s: State, dt: number, input: number) {
   s.t += dt;
   // Horizontal: ease towards the input speed, wrap at the edges.
   const target = Math.max(-1, Math.min(1, input)) * MOVE;
-  s.vx += (target - s.vx) * Math.min(1, dt * 10);
+  s.vx += (target - s.vx) * Math.min(1, dt * 18); // snappy, but not instant
   s.x = (((s.x + s.vx * dt) % W) + W) % W;
   if (Math.abs(s.vx) > 8) s.dir = s.vx > 0 ? 1 : -1;
 
