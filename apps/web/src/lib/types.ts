@@ -119,6 +119,9 @@ export interface RoomItem extends RecordModel {
 export interface FishBalance extends RecordModel {
   from_tasks: number;
   from_bonuses: number;
+  /** Mini-game runs and achievements. */
+  from_games?: number;
+  from_achievements?: number;
   spent: number;
 }
 

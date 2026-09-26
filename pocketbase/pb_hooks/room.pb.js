@@ -1,7 +1,7 @@
 /// <reference path="../pb_data/types.d.ts" />
 
 // The cat's room shop (docs/PLAN.md §6.7). The balance is summed on the server (fish on
-// completions + bonuses − purchases), so the check can't be fooled by the client.
+// completions + bonuses + games − purchases), so the check can't be fooled by the client.
 
 // POST /api/cathub/room/buy { item } → the new room_items record
 routerAdd(
@@ -37,6 +37,8 @@ routerAdd(
           `SELECT
             (SELECT COALESCE(SUM(fish), 0) FROM completions WHERE household = {:h})
             + (SELECT COALESCE(SUM(fish), 0) FROM fish_bonuses WHERE household = {:h})
+            + (SELECT COALESCE(SUM(fish), 0) FROM game_runs WHERE household = {:h})
+            + (SELECT COALESCE(SUM(fish), 0) FROM game_achievements WHERE household = {:h})
             - (SELECT COALESCE(SUM(price), 0) FROM room_items WHERE household = {:h}) AS balance`,
         )
         .bind({ h: household })

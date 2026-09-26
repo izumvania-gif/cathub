@@ -200,7 +200,9 @@ export function useFishBalance() {
     enabled: Boolean(user?.household),
     queryFn: async () => {
       const b = await pb.collection('fish_balance').getOne<FishBalance>(user!.household);
-      return b.from_tasks + b.from_bonuses - b.spent;
+      return (
+        b.from_tasks + b.from_bonuses + (b.from_games ?? 0) + (b.from_achievements ?? 0) - b.spent
+      );
     },
   });
 }

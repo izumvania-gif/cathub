@@ -8,3 +8,4 @@ export * from './supplies';
 export * from './rewards';
 export * from './duties';
 export * from './health';
+export * from './games';

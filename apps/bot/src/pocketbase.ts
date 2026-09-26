@@ -103,9 +103,14 @@ export class PocketBaseClient {
         .getFullList<CompletionRec>({ filter: this.pb.filter('done_at >= {:since}', { since }) }),
       this.pb.collection('snoozes').getFullList<SnoozeRec>(),
       this.pb.collection('supplies').getFullList<SupplyRec>(),
-      this.pb
-        .collection('fish_balance')
-        .getFullList<{ id: string; from_tasks: number; from_bonuses: number; spent: number }>(),
+      this.pb.collection('fish_balance').getFullList<{
+        id: string;
+        from_tasks: number;
+        from_bonuses: number;
+        from_games?: number;
+        from_achievements?: number;
+        spent: number;
+      }>(),
       this.pb.collection('duty_overrides').getFullList<OverrideRec>({
         filter: this.pb.filter('created >= {:s}', { s: handedSince }),
       }),
@@ -148,7 +153,13 @@ export class PocketBaseClient {
       handledTips: tips.filter((t) => t.household === household.id).map((t) => t.tip),
       fish: (() => {
         const b = balances.find((x) => x.id === household.id);
-        return b ? b.from_tasks + b.from_bonuses - b.spent : undefined;
+        return b
+          ? b.from_tasks +
+              b.from_bonuses +
+              (b.from_games ?? 0) +
+              (b.from_achievements ?? 0) -
+              b.spent
+          : undefined;
       })(),
     }));
   }
