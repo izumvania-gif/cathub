@@ -16,7 +16,7 @@ function whenLabel(tip: HealthTip, now: Date, tz: string) {
     new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', timeZone: tz }).format(d);
   switch (tip.status) {
     case 'overdue':
-      return `пора — срок был до ${date(tip.until)}`;
+      return `пора, срок был до ${date(tip.until)}`;
     case 'now':
       return tip.until.getTime() - now.getTime() > 60 * DAY
         ? 'сейчас'
@@ -75,7 +75,7 @@ export function HealthTips({
       </h2>
       <ul className="grid gap-2">
         {shown.map((tip) => (
-          <li key={tip.key} className="bg-card relative rounded-3xl p-4 pr-12">
+          <li key={tip.key} className="bg-card relative rounded-3xl p-4 pr-12 shadow-card">
             {tip.key !== 'need_birthdate' ? (
               <button
                 type="button"

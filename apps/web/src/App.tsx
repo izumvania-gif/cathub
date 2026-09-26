@@ -1,7 +1,7 @@
 import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister';
 import { QueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { MotionConfig } from 'motion/react';
+import { MotionConfig, motion } from 'motion/react';
 import { lazy, Suspense, useEffect } from 'react';
 import { CatLoader } from './cat/CatLoader';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -68,24 +68,51 @@ function JoinLink({ code }: { code: string }) {
   return null;
 }
 
+/** Tab switches fade the new screen in with a short rise; sub-pages of a tab share its key. */
+function PageFade({ children }: { children: React.ReactNode }) {
+  const [location] = useLocation();
+  const section = location.split('/')[1] ?? '';
+  return (
+    <motion.div
+      key={section}
+      id="content"
+      tabIndex={-1}
+      className="outline-none"
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 function Shell() {
   useRealtimeSync();
   return (
     <>
+      <a
+        href="#content"
+        className="bg-ink text-paper sr-only z-50 rounded-2xl px-4 py-3 font-semibold focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+      >
+        К содержимому
+      </a>
       <OfflineBanner />
-      <Switch>
-        <Route path="/" component={Today} />
-        <Route path="/journal" component={Journal} />
-        <Route path="/health" component={Health} />
-        <Route path="/tasks" component={Tasks} />
-        <Route path="/tasks/:id">{(p) => <TaskEditor id={p.id} />}</Route>
-        <Route path="/home" component={Household} />
-        <Route path="/room" component={Room} />
-        <Route path="/duties" component={Duties} />
-        <Route>
-          <Redirect to="/" />
-        </Route>
-      </Switch>
+      <PageFade>
+        <Switch>
+          <Route path="/" component={Today} />
+          <Route path="/journal" component={Journal} />
+          <Route path="/health" component={Health} />
+          <Route path="/tasks" component={Tasks} />
+          <Route path="/tasks/:id">{(p) => <TaskEditor id={p.id} />}</Route>
+          <Route path="/home" component={Household} />
+          <Route path="/room" component={Room} />
+          <Route path="/duties" component={Duties} />
+          <Route>
+            <Redirect to="/" />
+          </Route>
+        </Switch>
+      </PageFade>
       <TabBar />
     </>
   );
@@ -120,7 +147,7 @@ export function App() {
           </Suspense>
         </ErrorBoundary>
       </MotionConfig>
-      <Toaster position="top-center" richColors closeButton={false} offset={16} />
+      <Toaster position="top-center" theme="system" closeButton={false} offset={16} />
     </PersistQueryClientProvider>
   );
 }

@@ -19,6 +19,10 @@
   --tint: #e9e8f5;
   /* data series (validated: lightness band, chroma floor, contrast vs card) */
   --data: #4a4fc4;
+  /* shadows tinted with the ink hue, never pure black */
+  --shadow-rgb: 35 38 79;
+  --edge: rgb(255 255 255 / 0);
+  --shine: rgb(255 255 255 / 0.55);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -36,6 +40,10 @@
     --mint-ink: #4cc08e;
     --tint: #262a52;
     --data: #7f84f7;
+    --shadow-rgb: 5 6 20;
+    /* a faint top highlight gives dark cards an edge instead of a shadow */
+    --edge: rgb(255 255 255 / 0.05);
+    --shine: rgb(255 255 255 / 0.06);
   }
 }
 
@@ -55,6 +63,13 @@
   --color-mint-ink: var(--mint-ink);
   --color-tint: var(--tint);
   --color-data: var(--data);
+  --shadow-card:
+    inset 0 1px 0 var(--edge), 0 1px 2px rgb(var(--shadow-rgb) / 0.05),
+    0 10px 24px -14px rgb(var(--shadow-rgb) / 0.18);
+  --shadow-lift:
+    inset 0 1px 0 var(--edge), 0 2px 4px rgb(var(--shadow-rgb) / 0.06),
+    0 18px 36px -16px rgb(var(--shadow-rgb) / 0.3);
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @layer base {
@@ -76,6 +91,63 @@
   textarea {
     @apply text-base;
   }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  button,
+  a {
+    touch-action: manipulation;
+  }
+}
+
+/* Skeleton shimmer: a moving highlight over the tint, transform-free but cheap (one gradient). */
+@keyframes shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+@utility skeleton {
+  background: linear-gradient(100deg, transparent 30%, var(--shine) 50%, transparent 70%)
+    var(--tint);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s var(--ease-out-soft) infinite;
+}
+
+/* Toasts (sonner) in the app's own colours instead of the library defaults. */
+[data-sonner-toaster][data-sonner-theme] {
+  --normal-bg: var(--card);
+  --normal-text: var(--ink);
+  --normal-border: var(--line);
+  --border-radius: 1.25rem;
+  font-family: var(--font-sans);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] {
+  box-shadow: var(--shadow-lift);
+  font-weight: 500;
+}
+[data-sonner-toaster] [data-sonner-toast][data-type='success'] [data-icon] {
+  color: var(--mint-ink);
+}
+[data-sonner-toaster] [data-sonner-toast][data-type='error'] [data-icon] {
+  color: var(--tomato-ink);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled='true'] [data-button] {
+  height: 2rem;
+  padding-inline: 0.75rem;
+  border-radius: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+[data-sonner-toaster][data-sonner-theme] [data-sonner-toast] [data-description] {
+  color: var(--ink-soft);
 }
 
 @media (prefers-reduced-motion: reduce) {

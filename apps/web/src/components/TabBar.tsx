@@ -1,6 +1,8 @@
 import clsx from 'clsx';
 import { CalendarCheck, HeartPulse, History, House, ListChecks } from 'lucide-react';
+import { motion } from 'motion/react';
 import { Link, useLocation } from 'wouter';
+import { SNAP } from '../lib/motion';
 
 const TABS = [
   { href: '/', label: 'Сегодня', icon: CalendarCheck },
@@ -22,12 +24,21 @@ export function TabBar() {
               <Link
                 href={href}
                 className={clsx(
-                  'flex flex-col items-center gap-0.5 py-2.5 text-[0.7rem] font-semibold',
-                  active ? 'text-ink' : 'text-ink-soft',
+                  'flex flex-col items-center gap-0.5 pt-2 pb-2.5 text-[0.7rem] font-semibold transition-colors',
+                  active ? 'text-ink' : 'text-ink-soft hover:text-ink',
                 )}
                 aria-current={active ? 'page' : undefined}
               >
-                <Icon className="size-6" strokeWidth={active ? 2.4 : 1.8} />
+                <span className="relative flex h-8 w-14 items-center justify-center">
+                  {active ? (
+                    <motion.span
+                      layoutId="tab-pill"
+                      transition={SNAP}
+                      className="bg-tint absolute inset-0 rounded-full"
+                    />
+                  ) : null}
+                  <Icon className="relative size-6" strokeWidth={active ? 2.4 : 1.8} />
+                </span>
                 {label}
               </Link>
             </li>

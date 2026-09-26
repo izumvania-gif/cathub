@@ -158,7 +158,7 @@ function Week({ members }: { members: User[] }) {
     timeZone: tz,
   });
   return (
-    <section className="bg-card mt-3 rounded-3xl p-4">
+    <section className="bg-card mt-3 rounded-3xl p-4 shadow-card">
       <p className="text-ink-soft text-sm">
         Нагрузка за неделю (лёгкое дело — 1, тяжёлое — 3):{' '}
         {[...load.entries()]
@@ -211,7 +211,7 @@ function Away({ members }: { members: User[] }) {
     }
   };
   return (
-    <section className="bg-card mt-3 rounded-3xl p-4">
+    <section className="bg-card mt-3 rounded-3xl p-4 shadow-card">
       <p className="text-ink-soft text-sm">
         На эти дни ваши дела станут «для любого», и напоминания уйдут остальным.
       </p>
@@ -234,14 +234,14 @@ function Away({ members }: { members: User[] }) {
             return (
               <li key={a.id} className="flex items-center justify-between gap-2">
                 <span>
-                  {name} в отъезде: {fmt(a.from)} — {fmt(a.to)}
+                  {name} в отъезде с {fmt(a.from)} по {fmt(a.to)}
                 </span>
                 {mine ? (
                   <button
                     type="button"
                     onClick={() => void actions.removeAbsence(a.id).catch(() => {})}
                     className="text-tomato-ink text-sm font-medium"
-                    aria-label={`Убрать отъезд: ${name}, ${fmt(a.from)} — ${fmt(a.to)}`}
+                    aria-label={`Убрать отъезд: ${name}, с ${fmt(a.from)} по ${fmt(a.to)}`}
                   >
                     Убрать
                   </button>
@@ -286,7 +286,7 @@ export function Duties() {
       <p className="text-ink-soft mb-2 px-1 text-sm">
         Дела в режиме «По зоне» берут человека отсюда. У любого дела можно выбрать своё в редакторе.
       </p>
-      <ul className="bg-card divide-line divide-y rounded-3xl">
+      <ul className="bg-card divide-line divide-y overflow-hidden rounded-3xl shadow-card">
         {ORDER.map((c) => (
           <ZoneRow
             key={c}

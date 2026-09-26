@@ -76,7 +76,7 @@ function WeightCard() {
   };
 
   return (
-    <section className="bg-card rounded-[2rem] p-5">
+    <section className="bg-card rounded-[2rem] p-5 shadow-card">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-ink-soft text-sm font-semibold">{task.track_value!.label}</h2>
@@ -474,13 +474,13 @@ export function Health() {
         byYear.map(([year, list]) => (
           <section key={year} className="mb-5">
             <h3 className="text-ink-soft mb-2 px-1 text-xs font-semibold">{year}</h3>
-            <ul className="bg-card divide-line divide-y rounded-3xl">
+            <ul className="bg-card divide-line divide-y overflow-hidden rounded-3xl shadow-card">
               {list.map((r) => (
                 <li key={r.id}>
                   <button
                     type="button"
                     onClick={() => setSelected(r)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left"
+                    className="hover:bg-tint/60 active:bg-tint flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
                   >
                     <span className="text-xl">{HEALTH_TYPES[r.type].emoji}</span>
                     <span className="min-w-0 flex-1">

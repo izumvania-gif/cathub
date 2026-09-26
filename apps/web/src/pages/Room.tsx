@@ -38,7 +38,7 @@ export function Room() {
         qc.invalidateQueries({ queryKey: keys.room }),
         qc.invalidateQueries({ queryKey: keys.fish }),
       ]);
-      toast.success(`${ITEMS[key].label} — теперь в комнате!`);
+      toast.success(`${ITEMS[key].label} теперь в комнате`);
       navigator.vibrate?.(20);
     } catch (err) {
       toast.error(errorMessage(err));
@@ -70,7 +70,7 @@ export function Room() {
         <FishPill balance={fish.balance} className="text-base" />
       </header>
 
-      <section className="bg-card overflow-hidden rounded-[2rem]">
+      <section className="bg-card overflow-hidden rounded-[2rem] shadow-card">
         <CatScene
           look={look}
           mood={catMood(board.items, board.now, board.tz)}
@@ -87,7 +87,7 @@ export function Room() {
       </section>
 
       <h2 className="text-ink-soft mt-6 mb-2 px-1 text-sm font-semibold">Магазин</h2>
-      <ul className="bg-card divide-line divide-y rounded-3xl">
+      <ul className="bg-card divide-line divide-y overflow-hidden rounded-3xl shadow-card">
         {SHOP_ORDER.map((key) => {
           const it = ITEMS[key];
           const starter = STARTER_ITEMS.includes(key);
@@ -139,7 +139,7 @@ export function Room() {
       </ul>
 
       {leaders.length ? (
-        <section className="bg-card mt-6 rounded-3xl p-4">
+        <section className="bg-card mt-6 rounded-3xl p-4 shadow-card">
           <h2 className="font-medium">Кто сколько наловил</h2>
           <ul className="mt-2 grid gap-1 text-sm">
             {leaders.map((u) => (

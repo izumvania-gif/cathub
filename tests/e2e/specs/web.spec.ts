@@ -281,7 +281,7 @@ test('fish: a mark shows its reward, the shop sells an item once there is enough
   );
   await expect(rug).toBeEnabled();
   await rug.click();
-  await expect(page.getByText('Коврик — теперь в комнате!')).toBeVisible();
+  await expect(page.getByText('Коврик теперь в комнате')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Коврик: в комнате' })).toBeVisible();
   await expect(page.getByText('🐟 60')).toBeVisible();
 });

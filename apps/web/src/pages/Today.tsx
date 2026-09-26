@@ -1,5 +1,5 @@
 import { describeWhen, type Evaluation } from '@cathub/core';
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence, LayoutGroup } from 'motion/react';
 import { useState } from 'react';
 import { Link } from 'wouter';
 import { MOOD_LABELS } from '../cat/behavior';
@@ -10,7 +10,8 @@ import { SleepyCat } from '../components/SleepyCat';
 import { DoubleCheckSheet, TaskActionsSheet } from '../components/TaskActions';
 import { useCompleteFlow } from '../lib/completeFlow';
 import { TaskCard } from '../components/TaskCard';
-import { Button, Empty, Segmented } from '../components/ui';
+import { Button, Empty, RollingNumber, Segmented } from '../components/ui';
+import { HeartBurst } from '../components/HeartBurst';
 import { useUser } from '../lib/auth';
 import { useBoard, type BoardItem } from '../lib/board';
 import { bowlLevel, catMood, findFeeding, isEvening } from '../lib/catMood';
@@ -46,7 +47,7 @@ function CatHero({
   const fish = useFish();
   const roomItems = useRoomKeys();
   return (
-    <section className="bg-card relative overflow-hidden rounded-[2rem] pb-5 text-center">
+    <section className="bg-card shadow-card relative overflow-hidden rounded-[2rem] pb-5 text-center">
       <Link
         href="/room"
         className="absolute top-3 left-3 z-10"
@@ -229,9 +230,19 @@ export function Today() {
       <header className="mb-4 px-1">
         <p className="text-ink-soft text-sm first-letter:uppercase">{dateLabel}</p>
         <h1 className="font-display text-[1.65rem] font-semibold tracking-tight">
-          {todayTotal > 0 ? `Сделано ${doneCount} из ${todayTotal}` : 'Сегодня'}
+          {todayTotal > 0 ? (
+            <>
+              <span className="sr-only">{`Сделано ${doneCount} из ${todayTotal}`}</span>
+              <span aria-hidden>
+                Сделано <RollingNumber value={doneCount} /> из <RollingNumber value={todayTotal} />
+              </span>
+            </>
+          ) : (
+            'Сегодня'
+          )}
         </h1>
       </header>
+      <HeartBurst active={!isLoading && todayTotal > 0 && doneCount === todayTotal} />
 
       {isLoading ? (
         <CatLoader className="pt-16" />
@@ -266,7 +277,7 @@ export function Today() {
           {lowSupplies.length ? (
             <section className="mt-6">
               <h2 className="text-ink-soft mb-2 px-1 text-sm font-semibold">Заканчивается</h2>
-              <ul className="bg-card divide-line divide-y rounded-3xl">
+              <ul className="bg-card divide-line divide-y overflow-hidden rounded-3xl shadow-card">
                 {lowSupplies.map(({ supply, f }) => (
                   <li key={supply.id}>
                     <SupplyRow supply={supply} f={f} onOpen={() => setOpenSupply(supply.id)} />
@@ -275,26 +286,28 @@ export function Today() {
               </ul>
             </section>
           ) : null}
-          {now_.length ? (
-            <Section title="Сейчас" count={now_.length}>
-              {now_.map(card)}
-            </Section>
-          ) : null}
-          {soon.length ? (
-            <Section title="Скоро" count={soon.length}>
-              {soon.map(card)}
-            </Section>
-          ) : null}
-          {done.length ? (
-            <Section title="Сделано" count={done.length}>
-              {done.map(card)}
-            </Section>
-          ) : null}
-          {later.length ? (
-            <Section title="На неделе" count={later.length}>
-              {later.map(card)}
-            </Section>
-          ) : null}
+          <LayoutGroup>
+            {now_.length ? (
+              <Section title="Сейчас" count={now_.length}>
+                {now_.map(card)}
+              </Section>
+            ) : null}
+            {soon.length ? (
+              <Section title="Скоро" count={soon.length}>
+                {soon.map(card)}
+              </Section>
+            ) : null}
+            {done.length ? (
+              <Section title="Сделано" count={done.length}>
+                {done.map(card)}
+              </Section>
+            ) : null}
+            {later.length ? (
+              <Section title="На неделе" count={later.length}>
+                {later.map(card)}
+              </Section>
+            ) : null}
+          </LayoutGroup>
           {!now_.length && !soon.length && !later.length ? (
             <div className="mt-8 flex flex-col items-center text-center">
               <SleepyCat />

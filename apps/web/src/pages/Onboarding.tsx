@@ -182,7 +182,7 @@ export function Onboarding() {
               <Field label="Дата рождения" hint="Можно примерно. Пожилым котам осмотр нужен чаще.">
                 <Input type="date" value={birth} onChange={(e) => setBirth(e.target.value)} />
               </Field>
-              <div className="bg-card divide-line divide-y rounded-3xl px-4">
+              <div className="bg-card divide-line divide-y rounded-3xl px-4 shadow-card">
                 <Toggle
                   label="Гуляет на улице"
                   hint="Тогда от глистов обрабатывают чаще"
@@ -220,7 +220,7 @@ export function Onboarding() {
             {TASK_TEMPLATES.map((t) => {
               const on = picked.has(t.key);
               return (
-                <li key={t.key} className="bg-card rounded-3xl">
+                <li key={t.key} className="bg-card rounded-3xl shadow-card">
                   <button
                     type="button"
                     onClick={() => toggle(t.key)}

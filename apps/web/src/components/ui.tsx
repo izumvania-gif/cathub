@@ -1,6 +1,8 @@
 import clsx from 'clsx';
+import { AnimatePresence, motion } from 'motion/react';
+import { useId, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
+import { SNAP } from '../lib/motion';
 import { SleepyCat } from './SleepyCat';
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react';
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -20,11 +22,11 @@ export function Button({
       {...rest}
       disabled={disabled || busy}
       className={clsx(
-        'inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl px-5 font-semibold transition active:scale-[0.98] disabled:opacity-50',
-        variant === 'primary' && 'bg-ink text-paper',
-        variant === 'secondary' && 'bg-tint text-ink',
-        variant === 'ghost' && 'text-ink-soft',
-        variant === 'danger' && 'bg-tomato/10 text-tomato-ink',
+        'inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl px-5 font-semibold transition-[transform,background-color,box-shadow,opacity] duration-150 ease-(--ease-out-soft) active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50',
+        variant === 'primary' && 'bg-ink text-paper shadow-card hover:bg-ink/90',
+        variant === 'secondary' && 'bg-tint text-ink hover:bg-line',
+        variant === 'ghost' && 'text-ink-soft hover:bg-tint hover:text-ink',
+        variant === 'danger' && 'bg-tomato/10 text-tomato-ink hover:bg-tomato/15',
         className,
       )}
     >
@@ -59,7 +61,7 @@ export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputEleme
     <input
       {...rest}
       className={clsx(
-        'bg-card border-line placeholder:text-ink-soft/60 min-h-12 w-full rounded-2xl border px-4 outline-none focus:border-ink',
+        'bg-card border-line placeholder:text-ink-soft/70 min-h-12 w-full rounded-2xl border px-4 outline-none transition-[border-color,box-shadow] focus:border-ink focus:shadow-[0_0_0_3px_var(--tint)]',
         className,
       )}
     />
@@ -75,6 +77,7 @@ export function Segmented<T extends string>({
   options: Array<{ value: T; label: string }>;
   onChange: (v: T) => void;
 }) {
+  const id = useId();
   return (
     <div className="bg-tint grid auto-cols-fr grid-flow-col gap-1 rounded-2xl p-1">
       {options.map((o) => (
@@ -84,11 +87,18 @@ export function Segmented<T extends string>({
           aria-pressed={o.value === value}
           onClick={() => onChange(o.value)}
           className={clsx(
-            'min-h-10 rounded-xl px-2 text-sm font-semibold transition',
-            o.value === value ? 'bg-card text-ink shadow-sm' : 'text-ink-soft',
+            'relative min-h-10 rounded-xl px-2 text-sm font-semibold transition-colors',
+            o.value === value ? 'text-ink' : 'text-ink-soft hover:text-ink',
           )}
         >
-          {o.label}
+          {o.value === value ? (
+            <motion.span
+              layoutId={`seg-${id}`}
+              transition={SNAP}
+              className="bg-card shadow-card absolute inset-0 rounded-xl"
+            />
+          ) : null}
+          <span className="relative">{o.label}</span>
         </button>
       ))}
     </div>
@@ -120,14 +130,14 @@ export function Toggle({
       </span>
       <span
         className={clsx(
-          'relative h-7 w-12 shrink-0 rounded-full transition',
+          'relative h-7 w-12 shrink-0 rounded-full transition-colors',
           checked ? 'bg-mint' : 'bg-line',
         )}
       >
         <span
           className={clsx(
-            'bg-card absolute top-1 size-5 rounded-full shadow transition-all',
-            checked ? 'left-6' : 'left-1',
+            'bg-card absolute top-1 left-1 size-5 rounded-full shadow transition-transform duration-200 ease-(--ease-out-soft)',
+            checked && 'translate-x-5',
           )}
         />
       </span>
@@ -161,10 +171,55 @@ export function Avatar({ name, className }: { name?: string; className?: string 
 
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="bg-card flex flex-col items-center rounded-3xl p-6 text-center">
-      <SleepyCat className="mb-2 h-16" />
-      <p className="font-semibold">{title}</p>
+    <div className="bg-card shadow-card flex flex-col items-center rounded-3xl px-6 py-8 text-center">
+      <SleepyCat className="mb-3 h-16" />
+      <p className="font-display font-semibold">{title}</p>
       {children ? <div className="text-ink-soft mt-1 text-sm">{children}</div> : null}
     </div>
+  );
+}
+
+/** Placeholder blocks shaped like the content that is loading. */
+export function Skeleton({ className }: { className?: string }) {
+  return <span aria-hidden className={clsx('skeleton block rounded-2xl', className)} />;
+}
+
+/** A list of task-card-shaped placeholders, announced once to screen readers. */
+export function ListSkeleton({ rows = 3, label = 'Загружаем' }: { rows?: number; label?: string }) {
+  return (
+    <div role="status" aria-label={label} className="grid gap-2">
+      {Array.from({ length: rows }, (_, i) => (
+        <div key={i} className="bg-card shadow-card flex items-center gap-3 rounded-3xl p-3">
+          <Skeleton className="size-12 shrink-0" />
+          <span className="grid flex-1 gap-2">
+            <Skeleton className="h-4 w-3/5 rounded-lg" />
+            <Skeleton className="h-3 w-2/5 rounded-lg" />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * A number that rolls to its new value: the old digits slide up and out, the new ones in.
+ * Motion's reducedMotion setting turns this into an instant swap.
+ */
+export function RollingNumber({ value, className }: { value: number; className?: string }) {
+  return (
+    <span className={clsx('relative inline-flex overflow-hidden tabular-nums', className)}>
+      <AnimatePresence initial={false} mode="popLayout">
+        <motion.span
+          key={value}
+          initial={{ y: '-0.9em', opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: '0.9em', opacity: 0 }}
+          transition={SNAP}
+          className="inline-block"
+        >
+          {value}
+        </motion.span>
+      </AnimatePresence>
+    </span>
   );
 }

@@ -124,7 +124,7 @@ function CatForm({ cat }: { cat: Cat }) {
           onChange={(e) => setForm({ ...form, birth: e.target.value })}
         />
       </Field>
-      <div className="bg-card divide-line divide-y rounded-3xl px-4">
+      <div className="bg-card divide-line divide-y rounded-3xl px-4 shadow-card">
         <Toggle
           label="Гуляет на улице"
           checked={form.outdoor}
@@ -141,7 +141,7 @@ function CatForm({ cat }: { cat: Cat }) {
           onChange={(v) => setForm({ ...form, neutered: v })}
         />
       </div>
-      <section aria-label="Внешность кота" className="bg-card rounded-3xl p-4">
+      <section aria-label="Внешность кота" className="bg-card rounded-3xl p-4 shadow-card">
         <h3 className="font-medium">Внешность</h3>
         <p className="text-ink-soft mb-3 text-sm">Пиксельный кот на главном экране</p>
         <div className="mb-3 flex justify-center">
@@ -217,7 +217,7 @@ function TelegramCard() {
   };
 
   return (
-    <div className="bg-card rounded-3xl p-4">
+    <div className="bg-card rounded-3xl p-4 shadow-card">
       <p className="font-medium">Напоминания в Telegram</p>
       {linked ? (
         <>
@@ -348,7 +348,7 @@ function GroupChatCard() {
   };
 
   return (
-    <div className="bg-card rounded-3xl p-4">
+    <div className="bg-card rounded-3xl p-4 shadow-card">
       <p className="font-medium">Семейный чат</p>
       <p className="text-ink-soft mt-1 text-sm">
         {linked
@@ -388,7 +388,7 @@ function CalendarCard() {
   };
 
   return (
-    <div className="bg-card rounded-3xl p-4">
+    <div className="bg-card rounded-3xl p-4 shadow-card">
       <p className="font-medium">Календарь в телефоне</p>
       <p className="text-ink-soft mt-1 text-sm">
         Прививки, осмотры, обработки и другие редкие дела появятся в календаре iPhone или Google и
@@ -439,7 +439,7 @@ function ExportCard() {
     }
   };
   return (
-    <div className="bg-card rounded-3xl p-4">
+    <div className="bg-card rounded-3xl p-4 shadow-card">
       <p className="font-medium">Ваши данные</p>
       <p className="text-ink-soft mt-1 text-sm">
         Сервер делает резервную копию каждую ночь. Здесь можно скачать всё себе: дела, отметки,
@@ -489,7 +489,7 @@ export function Household() {
       <PageHeader title={household.data?.name ?? 'Дом'} />
 
       <h2 className="text-ink-soft mb-2 px-1 text-sm font-semibold">Семья</h2>
-      <ul className="bg-card divide-line divide-y rounded-3xl px-4">
+      <ul className="bg-card divide-line divide-y rounded-3xl px-4 shadow-card">
         {(members.data ?? []).map((m) => (
           <li key={m.id} className="flex items-center gap-3 py-3">
             <Avatar name={m.name || m.email} className="size-9 text-sm" />
@@ -516,14 +516,14 @@ export function Household() {
       <h2 className="text-ink-soft mb-2 mt-8 px-1 text-sm font-semibold">Кот</h2>
       <Link
         href="/duties"
-        className="bg-card mb-3 flex min-h-14 items-center justify-between rounded-3xl px-4 font-medium"
+        className="bg-card mb-3 flex min-h-14 items-center justify-between rounded-3xl px-4 font-medium shadow-card"
       >
         Обязанности: кто за что, неделя, отъезды
         <span aria-hidden>→</span>
       </Link>
       <Link
         href="/room"
-        className="bg-card mb-4 flex min-h-14 items-center justify-between rounded-3xl px-4 font-medium"
+        className="bg-card mb-4 flex min-h-14 items-center justify-between rounded-3xl px-4 font-medium shadow-card"
       >
         Комната кота и магазин
         <span aria-hidden>🐟 →</span>

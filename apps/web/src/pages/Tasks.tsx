@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Link } from 'wouter';
 import { AddSupplySheet, SupplyRow, SupplySheet } from '../components/Supplies';
 import { useSupplyForecasts } from '../lib/supplies';
-import { Empty, PageHeader } from '../components/ui';
+import { Empty, ListSkeleton, PageHeader } from '../components/ui';
 import { useBoard } from '../lib/board';
 
 export function Tasks() {
@@ -26,7 +26,7 @@ export function Tasks() {
         action={
           <Link
             href="/tasks/new"
-            className="bg-ink text-paper flex min-h-10 items-center gap-1.5 rounded-2xl px-4 text-sm font-semibold"
+            className="bg-ink text-paper shadow-card hover:bg-ink/90 flex min-h-10 items-center gap-1.5 rounded-2xl px-4 text-sm font-semibold transition-[transform,background-color] active:scale-[0.97]"
           >
             <Plus className="size-4" strokeWidth={3} /> Новое
           </Link>
@@ -44,7 +44,7 @@ export function Tasks() {
           </button>
         </div>
         {supplies.list.length ? (
-          <ul className="bg-card divide-line divide-y rounded-3xl">
+          <ul className="bg-card divide-line divide-y overflow-hidden rounded-3xl shadow-card">
             {supplies.list.map(({ supply, f }) => (
               <li key={supply.id}>
                 <SupplyRow supply={supply} f={f} onOpen={() => setOpenSupply(supply.id)} />
@@ -55,7 +55,7 @@ export function Tasks() {
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="bg-card text-ink-soft w-full rounded-3xl p-4 text-left text-sm"
+            className="bg-card text-ink-soft w-full rounded-3xl p-4 text-left text-sm shadow-card"
           >
             Следите за кормом и наполнителем: приложение посчитает, на сколько дней хватит, и
             напомнит купить заранее.
@@ -68,6 +68,7 @@ export function Tasks() {
         f={selected?.f ?? null}
         onClose={() => setOpenSupply(null)}
       />
+      {isLoading ? <ListSkeleton label="Загружаем дела" /> : null}
       {!isLoading && items.length === 0 ? (
         <Empty title="Дел пока нет">Нажмите «Новое», чтобы добавить.</Empty>
       ) : null}
@@ -76,10 +77,13 @@ export function Tasks() {
           <h2 className="text-ink-soft mb-2 px-1 text-sm font-semibold">
             {CATEGORY_LABELS[cat] ?? 'Другое'}
           </h2>
-          <ul className="bg-card divide-line divide-y rounded-3xl">
+          <ul className="bg-card divide-line divide-y overflow-hidden rounded-3xl shadow-card">
             {list.map(({ task, ev }) => (
               <li key={task.id}>
-                <Link href={`/tasks/${task.id}`} className="flex items-center gap-3 px-4 py-3">
+                <Link
+                  href={`/tasks/${task.id}`}
+                  className="hover:bg-tint/60 active:bg-tint flex items-center gap-3 px-4 py-3 transition-colors"
+                >
                   <span className="text-xl">{task.emoji || '🐾'}</span>
                   <span className="min-w-0 flex-1">
                     <span className="line-clamp-2 block font-medium leading-snug">

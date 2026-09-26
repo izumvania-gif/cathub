@@ -8,7 +8,7 @@ export function InstallHint() {
   if (mode === 'none') return null;
   return (
     <section
-      className="bg-card relative mt-4 rounded-3xl p-4 pr-12"
+      className="bg-card relative mt-4 rounded-3xl p-4 pr-12 shadow-card"
       aria-label="Установка приложения"
     >
       <button

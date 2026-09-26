@@ -1,3 +1,4 @@
+import { motion } from 'motion/react';
 import type { Completion, User } from '../lib/types';
 
 /**
@@ -28,17 +29,20 @@ export function StatsCard({
   const max = Math.max(...rows.map((r) => r.n));
 
   return (
-    <section className="bg-card mb-5 rounded-3xl p-4">
+    <section className="bg-card shadow-card mb-5 rounded-3xl p-4">
       <h2 className="font-medium">Кто сколько сделал</h2>
       <p className="text-ink-soft text-sm">за 30 дней · всего {total}</p>
       <ul className="mt-3 grid gap-2.5" aria-hidden>
-        {rows.map((r) => (
+        {rows.map((r, i) => (
           <li key={r.id} className="grid grid-cols-[5.5rem_1fr_auto] items-center gap-2 text-sm">
             <span className="truncate">{r.name}</span>
             <span className="bg-line/50 h-2.5 overflow-hidden rounded-full">
-              <span
-                className="bg-data block h-full rounded-full"
+              <motion.span
+                className="bg-data block h-full origin-left rounded-full"
                 style={{ width: `${(r.n / max) * 100}%` }}
+                initial={{ scaleX: 0 }}
+                animate={{ scaleX: 1 }}
+                transition={{ type: 'spring', stiffness: 120, damping: 20, delay: i * 0.06 }}
               />
             </span>
             <span className="text-ink-soft tabular-nums">

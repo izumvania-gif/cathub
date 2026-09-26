@@ -124,7 +124,7 @@ export function TaskActionsSheet({
             <p className="text-ink-soft mt-3 text-sm">
               Последний раз: {describeWhen(item.last.done_at, now, tz)}
               {item.last.expand?.user?.name ? `, ${item.last.expand.user.name}` : ''}
-              {item.last.value ? ` — ${item.last.value} ${track?.unit ?? ''}` : ''}
+              {item.last.value ? `: ${item.last.value} ${track?.unit ?? ''}` : ''}
             </p>
           ) : null}
           {task.medical ? (

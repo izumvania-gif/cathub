@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Sheet } from '../components/Sheet';
 import { StatsCard } from '../components/StatsCard';
-import { Avatar, Button, Empty, PageHeader } from '../components/ui';
+import { Avatar, Button, Empty, ListSkeleton, PageHeader } from '../components/ui';
 import { useTaskActions } from '../lib/actions';
 import { useNow, useTz } from '../lib/board';
 import { errorMessage } from '../lib/pb';
@@ -61,8 +61,8 @@ export function Journal() {
       type="button"
       onClick={() => setWho(id)}
       className={clsx(
-        'min-h-9 shrink-0 rounded-full px-4 text-sm font-semibold',
-        who === id ? 'bg-ink text-paper' : 'bg-card text-ink-soft',
+        'min-h-9 shrink-0 rounded-full px-4 text-sm font-semibold transition-colors active:scale-[0.97]',
+        who === id ? 'bg-ink text-paper' : 'bg-card text-ink-soft hover:text-ink shadow-card',
       )}
     >
       {label}
@@ -78,7 +78,9 @@ export function Journal() {
         {(members.data ?? []).map((m) => chip(m.id, m.name || m.email))}
       </div>
 
-      {groups.length === 0 ? (
+      {completions.isLoading ? (
+        <ListSkeleton label="Загружаем журнал" />
+      ) : groups.length === 0 ? (
         <Empty title="Записей пока нет">Отмеченные дела появятся здесь.</Empty>
       ) : (
         groups.map((g) => (
@@ -86,7 +88,7 @@ export function Journal() {
             <h2 className="text-ink-soft mb-2 px-1 text-sm font-semibold first-letter:uppercase">
               {g.label}
             </h2>
-            <ul className="bg-card divide-line divide-y rounded-3xl">
+            <ul className="bg-card divide-line divide-y overflow-hidden rounded-3xl shadow-card">
               {g.items.map((c) => {
                 const t = taskById.get(c.task);
                 return (
@@ -94,7 +96,7 @@ export function Journal() {
                     <button
                       type="button"
                       onClick={() => setSelected(c)}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-left"
+                      className="hover:bg-tint/60 active:bg-tint flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
                     >
                       <span className="text-xl">{t?.emoji ?? '🐾'}</span>
                       <span className="min-w-0 flex-1">
@@ -105,8 +107,10 @@ export function Journal() {
                           )}
                         >
                           {t?.title ?? 'Удалённое дело'}
-                          {c.kind === 'skipped' ? ' — пропуск' : ''}
-                          {c.value ? ` — ${c.value} ${t?.track_value?.unit ?? ''}` : ''}
+                          {c.kind === 'skipped' ? ', пропуск' : ''}
+                          {c.value
+                            ? `: ${c.value.toLocaleString('ru-RU')} ${t?.track_value?.unit ?? ''}`
+                            : ''}
                         </span>
                         {c.note ? (
                           <span className="text-ink-soft block truncate text-sm">{c.note}</span>

@@ -628,7 +628,7 @@ function Editor({ task }: { task?: Task }) {
           </span>
         </label>
 
-        <div className="bg-card divide-line divide-y rounded-3xl px-4">
+        <div className="bg-card divide-line divide-y rounded-3xl px-4 shadow-card">
           <Toggle
             label="Записывать значение"
             hint="Например, вес при взвешивании"

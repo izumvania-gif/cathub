@@ -57,7 +57,7 @@ export function Sheet({
       {open ? (
         <div className="fixed inset-0 z-50" role="dialog" aria-modal aria-label={title}>
           <motion.div
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-[rgb(var(--shadow-rgb)/0.5)] backdrop-blur-[2px]"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -66,7 +66,7 @@ export function Sheet({
           <motion.div
             ref={panel}
             tabIndex={-1}
-            className="bg-card absolute inset-x-0 bottom-0 outline-none mx-auto max-h-[92dvh] max-w-lg overflow-y-auto rounded-t-[2rem] px-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-3"
+            className="bg-card shadow-lift absolute inset-x-0 bottom-0 outline-none mx-auto max-h-[92dvh] max-w-lg overflow-y-auto rounded-t-[2rem] px-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] pt-3"
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}

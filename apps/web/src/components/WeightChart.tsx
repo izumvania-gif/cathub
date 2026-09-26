@@ -1,3 +1,4 @@
+import { motion } from 'motion/react';
 import { useMemo, useRef, useState, type PointerEvent } from 'react';
 
 export interface Point {
@@ -121,8 +122,11 @@ export function WeightChart({ points, unit, tz }: { points: Point[]; unit: strin
             strokeDasharray="3 3"
           />
         ) : null}
-        <path
+        <motion.path
           d={path}
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
           fill="none"
           stroke="var(--data)"
           strokeWidth="2"
@@ -130,8 +134,11 @@ export function WeightChart({ points, unit, tz }: { points: Point[]; unit: strin
           strokeLinecap="round"
         />
         {coords.map((c, i) => (
-          <circle
+          <motion.circle
             key={i}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.15 + (i / Math.max(1, coords.length - 1)) * 0.7, duration: 0.2 }}
             cx={c.cx}
             cy={c.cy}
             r={i === active ? 5.5 : 4}

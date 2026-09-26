@@ -34,7 +34,7 @@ export function SupplyRow({
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full items-center gap-3 px-4 py-3 text-left"
+      className="hover:bg-tint/60 active:bg-tint flex w-full items-center gap-3 px-4 py-3 text-left transition-colors"
     >
       <span className="text-xl">{supply.emoji || '📦'}</span>
       <span className="min-w-0 flex-1">
