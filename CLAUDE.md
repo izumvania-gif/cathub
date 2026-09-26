@@ -70,7 +70,10 @@ pnpm-workspaces monorepo:
   vite-plugin-pwa, date-fns with `ru` locale).
 - `apps/bot`: Node + TypeScript + grammY. `ReminderService.tick()` (every 30 s) loads all
   households as superuser, asks core's `reminderPlan` which reminder is due, and sends each
-  (task, occurrence, stage, chat) once. `reminder_log` has a unique index on that tuple and stores
+  (task, occurrence, stage, chat) once. Reminders are deliberately few: only chores whose
+  `notifyLevel` is `push` (`tasks.notify`; small daily chores like water default to `digest`), one
+  message at the due time, nothing for a late daily slot, and for overdue rare chores a nudge at
+  1, 3, 7, 14… days (`nudge1..8`) that replaces the previous message about it. `reminder_log` has a unique index on that tuple and stores
   the message text. The same tick edits open reminders whose occurrence was handled (in the app or
   another chat) to "✅ Петя, 20:03" — polling, not realtime, since Node has no EventSource.
   Callback data is `<d|s|z>:<taskId>:<occurrence seconds>`. Routing: a task with an assignee goes

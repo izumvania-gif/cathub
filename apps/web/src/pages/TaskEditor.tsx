@@ -1,4 +1,7 @@
 import {
+  NOTIFY_LABELS,
+  notifyLevel,
+  type NotifyLevel,
   ASSIGN_MODE_LABELS,
   assignMode,
   WEEKDAY_SHORT,
@@ -70,6 +73,7 @@ interface Draft {
   assignee: string;
   rotation: string[];
   weight: Weight;
+  notify: NotifyLevel;
 }
 
 function draftFrom(task: Task | undefined): Draft {
@@ -98,6 +102,7 @@ function draftFrom(task: Task | undefined): Draft {
     assignee: task?.assignee ?? '',
     rotation: task?.rotation ?? [],
     weight: taskWeight(task ?? {}),
+    notify: notifyLevel(task ?? {}),
   };
 }
 
@@ -224,6 +229,7 @@ function Editor({ task }: { task?: Task }) {
             ? Object.fromEntries(Object.entries(d.dutyMap).filter(([k, v]) => v && isMapKey(k)))
             : null,
         weight: d.weight,
+        notify: d.notify,
       };
       if (task) await pb.collection('tasks').update(task.id, body);
       else
@@ -599,6 +605,28 @@ function Editor({ task }: { task?: Task }) {
             </p>
           )}
         </div>
+
+        <label className="grid gap-1.5">
+          <span className="text-ink-soft text-sm font-medium">Напоминания в Telegram</span>
+          <select
+            className="bg-card border-line min-h-12 w-full rounded-2xl border px-3"
+            value={d.notify}
+            onChange={(e) => set('notify', e.target.value as NotifyLevel)}
+          >
+            {(Object.keys(NOTIFY_LABELS) as NotifyLevel[]).map((n) => (
+              <option key={n} value={n}>
+                {NOTIFY_LABELS[n]}
+              </option>
+            ))}
+          </select>
+          <span className="text-ink-soft text-xs">
+            {d.notify === 'push'
+              ? 'Одно сообщение в срок. Если просрочено — дело просто ждёт в приложении, а редкие дела напомнят о себе ещё раз через день, 3 дня и неделю.'
+              : d.notify === 'digest'
+                ? 'Без отдельных сообщений: дело будет в утренней сводке.'
+                : 'Только в приложении.'}
+          </span>
+        </label>
 
         <div className="bg-card divide-line divide-y rounded-3xl px-4">
           <Toggle

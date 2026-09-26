@@ -4,6 +4,7 @@ import {
   describeSupply,
   healthEventsFromTasks,
   healthPlan,
+  notifyLevel,
   supplyForecast,
   evaluate,
   urgencyCompare,
@@ -17,11 +18,12 @@ import type { HouseholdState, TaskRec } from './types';
 export const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-const STAGE_PREFIX: Record<ReminderStage, string> = {
-  before: 'Скоро',
-  due: 'Пора',
-  overdue: 'Просрочено',
-};
+/** The first word of a reminder: "Скоро", "Пора", or for a rare nudge "Всё ещё ждёт". */
+function stagePrefix(stage: ReminderStage): string {
+  if (stage === 'before') return 'Скоро';
+  if (stage === 'due') return 'Пора';
+  return 'Всё ещё ждёт';
+}
 
 export function timeIn(tz: string, d: Date) {
   return new Intl.DateTimeFormat('ru-RU', {
@@ -41,7 +43,7 @@ export function reminderText(
 ): string {
   const title = `${task.emoji || '🐾'} <b>${escapeHtml(task.title)}</b>`;
   const when = stage === 'due' ? '' : ` — ${describeDue(ev, now, tz)}`;
-  const lines = [`${STAGE_PREFIX[stage]}: ${title}${when}`];
+  const lines = [`${stagePrefix(stage)}: ${title}${when}`];
   const meta = [catName ? escapeHtml(catName) : null, describeSchedule(task.schedule)].filter(
     Boolean,
   );
@@ -176,7 +178,9 @@ export function summaryText(
   forUser?: string,
 ): { text: string; pending: number } {
   const tz = state.household.timezone || 'Europe/Moscow';
+  // Chores set to "Не напоминать" stay out of Telegram entirely.
   const items = state.tasks
+    .filter((task) => notifyLevel(task) !== 'off')
     .map((task) => ({
       task,
       ev: evaluate(

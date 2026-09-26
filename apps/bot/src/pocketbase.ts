@@ -360,6 +360,16 @@ export class PocketBaseClient {
     }));
   }
 
+  async openRemindersFor(taskId: string, chatId: string): Promise<ReminderLogRec[]> {
+    await this.ensureAuth();
+    return this.pb.collection('reminder_log').getFullList<ReminderLogRec>({
+      filter: this.pb.filter('resolved = false && task = {:t} && chat_id = {:c}', {
+        t: taskId,
+        c: chatId,
+      }),
+    });
+  }
+
   async resolveReminder(id: string): Promise<void> {
     await this.pb.collection('reminder_log').update(id, { resolved: true });
   }

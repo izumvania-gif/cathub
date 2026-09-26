@@ -1,4 +1,4 @@
-import type { DutyZones, Schedule } from '@cathub/core';
+import type { DutyZones, ReminderStage, Schedule } from '@cathub/core';
 
 export interface HouseholdRec {
   id: string;
@@ -47,6 +47,8 @@ export interface TaskRec {
   created: string;
   assign_mode: string;
   duty_map: Record<string, string> | null;
+  /** push | digest | off, '' = default by template (core's notifyLevel). */
+  notify: string;
   rotation: string[];
 }
 
@@ -87,7 +89,7 @@ export interface ReminderLogRec {
   id: string;
   task: string;
   occurrence_at: string;
-  stage: 'before' | 'due' | 'overdue';
+  stage: ReminderStage;
   chat_id: string;
   message_id: number;
   sent_at: string;

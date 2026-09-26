@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { digestDue, isQuietTime, localDate, reminderPlan } from './reminders';
+import { digestDue, isQuietTime, localDate, notifyLevel, reminderPlan } from './reminders';
 import type { Schedule } from './schedule';
 
 const TZ = 'Europe/Moscow';
@@ -18,13 +18,37 @@ const vaccine: Schedule = {
 };
 
 describe('reminderPlan', () => {
-  it('nothing before a daily slot, due at the slot, overdue an hour later', () => {
+  it('a daily slot: one reminder at the slot, nothing when it runs late', () => {
     expect(reminderPlan(feeding, [], at('2026-09-25T07:30:00'))).toBeNull();
     expect(reminderPlan(feeding, [], at('2026-09-25T08:05:00'))).toEqual({
       stage: 'due',
       occurrence: msk('2026-09-25T08:00:00'),
     });
-    expect(reminderPlan(feeding, [], at('2026-09-25T09:05:00'))?.stage).toBe('overdue');
+    // Overdue: the chore waits in the app; the next slot brings the next reminder.
+    expect(reminderPlan(feeding, [], at('2026-09-25T09:05:00'))).toBeNull();
+    expect(reminderPlan(feeding, [], at('2026-09-25T20:02:00'))?.stage).toBe('due');
+  });
+
+  it('an overdue rare chore is nudged now and then: a day, 3 days, a week, then weekly', () => {
+    const c = [done('2025-10-10T12:00:00')];
+    // Due Oct 10 with 14 grace days: overdue from the end of Oct 24.
+    const stage = (d: string) => reminderPlan(vaccine, c, at(d))?.stage ?? null;
+    expect(stage('2026-10-24T12:00:00')).toBe('due');
+    expect(stage('2026-10-25T12:00:00')).toBeNull(); // just overdue: it simply waits
+    expect(stage('2026-10-26T12:00:00')).toBe('nudge1');
+    expect(stage('2026-10-27T12:00:00')).toBe('nudge1'); // the same one: already sent
+    expect(stage('2026-10-28T12:00:00')).toBe('nudge2');
+    expect(stage('2026-11-01T12:00:00')).toBe('nudge3');
+    expect(stage('2026-11-08T12:00:00')).toBe('nudge4');
+    expect(stage('2026-12-24T12:00:00')).toBe('nudge8'); // and that's the last
+  });
+
+  it('only chores set to push get reminders; small daily ones default to the digest', () => {
+    expect(reminderPlan(feeding, [], at('2026-09-25T08:05:00'), 'digest')).toBeNull();
+    expect(notifyLevel({ template_key: 'water' })).toBe('digest');
+    expect(notifyLevel({ template_key: 'feeding' })).toBe('push');
+    expect(notifyLevel({ template_key: 'water', notify: 'push' })).toBe('push');
+    expect(notifyLevel({})).toBe('push');
   });
 
   it('nothing once the slot is covered', () => {

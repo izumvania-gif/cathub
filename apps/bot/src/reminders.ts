@@ -2,6 +2,8 @@ import {
   DEFAULT_QUIET_HOURS,
   digestDue,
   evaluate,
+  isNudge,
+  notifyLevel,
   isAway,
   isQuietTime,
   localDate,
@@ -198,7 +200,7 @@ export class ReminderService {
     for (const task of state.tasks) {
       const completions = completionsOf(state, task.id);
       const opts = { now, tz, snoozedUntil: snoozeOf(state, task.id) };
-      const decision = reminderPlan(task.schedule, completions, opts);
+      const decision = reminderPlan(task.schedule, completions, opts, notifyLevel(task));
       if (!decision) continue;
       const ev = evaluate(task.schedule, completions, opts);
       for (const dest of this.destinations(state, task, decision.occurrence)) {
@@ -207,6 +209,8 @@ export class ReminderService {
         if (sent.has(key) || this.sentInProcess.has(key)) continue;
         this.sentInProcess.add(key);
         try {
+          // A nudge replaces the earlier reminder about this chore instead of piling up.
+          if (isNudge(decision.stage)) await this.clearOpen(task.id, dest.chatId);
           const text = reminderText(task, decision.stage, ev, now, tz, state.cat?.name);
           const msg = await this.api.sendMessage(dest.chatId, text, {
             parse_mode: 'HTML',
@@ -306,6 +310,21 @@ export class ReminderService {
         ? resolutionLine(handled.kind, who, timeIn(tz, new Date(handled.done_at)), handled.fish)
         : resolutionLine('gone', null, '');
       await this.finish(r, line);
+    }
+  }
+
+  /** Deletes earlier open reminders about a task in a chat (or strips their buttons if too old). */
+  private async clearOpen(taskId: string, chatId: string) {
+    for (const r of await this.db.openRemindersFor(taskId, chatId)) {
+      try {
+        await this.api.deleteMessage(r.chat_id, r.message_id);
+      } catch (err) {
+        if (!(err instanceof GrammyError)) throw err;
+        await this.api
+          .editMessageReplyMarkup(r.chat_id, r.message_id, { reply_markup: undefined })
+          .catch(() => {});
+      }
+      await this.db.resolveReminder(r.id);
     }
   }
 

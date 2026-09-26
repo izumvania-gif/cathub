@@ -453,3 +453,36 @@ test('duties: while the assignee is away, the others get the reminder', async ()
   await new Promise((r) => setTimeout(r, 2000));
   expect((await tgCalls(petyaChat)).filter(isReminder('Петин лоток'))).toHaveLength(0);
 });
+
+test('quieter reminders: missed slots just wait, rare chores get an occasional nudge', async () => {
+  const { owner, household, chat } = await linkedOwner();
+  // A daily slot 90 minutes ago (late): no "overdue" message.
+  await createTask(owner, household.id, {
+    title: 'Пропущенный слот',
+    category: 'litter',
+    schedule: { kind: 'daily_slots', times: [mskTime(-90)] },
+  });
+  // A small daily chore due now: only in the morning digest.
+  await createTask(owner, household.id, {
+    title: 'Вода по умолчанию',
+    template_key: 'water',
+    category: 'feeding',
+    schedule: { kind: 'daily_slots', times: [mskTime(-5)] },
+  });
+  // A rare chore overdue for two days: one nudge.
+  const start = new Date(Date.now() - 3 * 86_400_000).toISOString();
+  await createTask(owner, household.id, {
+    title: 'Старая замена наполнителя',
+    category: 'litter',
+    schedule: { kind: 'interval', every: 14, unit: 'day', anchor: 'completion', startDate: start },
+  });
+
+  const nudge = await waitForCall(chat, isReminder('Старая замена наполнителя'), 'nudge sent');
+  expect(nudge.params.text).toContain('Всё ещё ждёт');
+  await new Promise((r) => setTimeout(r, 2500));
+  const calls = await tgCalls(chat);
+  expect(calls.filter(isReminder('Пропущенный слот'))).toHaveLength(0);
+  expect(calls.filter(isReminder('Вода по умолчанию'))).toHaveLength(0);
+  // Only once per nudge.
+  expect(calls.filter(isReminder('Старая замена наполнителя'))).toHaveLength(1);
+});

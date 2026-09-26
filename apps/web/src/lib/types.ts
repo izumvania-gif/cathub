@@ -1,4 +1,11 @@
-import type { AssignMode, DutyZones, Schedule, TaskCategory, TrackValue } from '@cathub/core';
+import type {
+  AssignMode,
+  DutyZones,
+  NotifyLevel,
+  Schedule,
+  TaskCategory,
+  TrackValue,
+} from '@cathub/core';
 import type { RecordModel } from 'pocketbase';
 
 export interface User extends RecordModel {
@@ -77,6 +84,8 @@ export interface Task extends RecordModel {
   /** See core's assignMode(); '' on tasks from before duty sharing. */
   assign_mode: AssignMode | '';
   duty_map: Record<string, string> | null;
+  /** How it reaches Telegram (core's notifyLevel); '' = default by template. */
+  notify: NotifyLevel | '';
   medical: boolean;
   notes: string;
   assignee: string;
