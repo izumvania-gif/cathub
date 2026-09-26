@@ -37,7 +37,7 @@ export function TabBar() {
                       className="bg-tint absolute inset-0 rounded-full"
                     />
                   ) : null}
-                  <Icon className="relative size-6" strokeWidth={active ? 2.4 : 1.8} />
+                  <Icon className="relative z-10 size-6" strokeWidth={active ? 2.4 : 1.8} />
                 </span>
                 {label}
               </Link>

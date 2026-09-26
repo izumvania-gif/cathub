@@ -37,12 +37,13 @@ interface Piece {
 
 function burst(seed: number): Piece[] {
   return Array.from({ length: 16 }, (_, i) => {
-    const angle = -Math.PI / 2 + ((i / 15) * 2 - 1) * 1.25 + (Math.random() - 0.5) * 0.3;
-    const dist = 90 + Math.random() * 90;
+    // Fan out sideways and a little up, then fall: the hearts stay on screen below the header.
+    const angle = -Math.PI / 2 + ((i / 15) * 2 - 1) * 1.45 + (Math.random() - 0.5) * 0.3;
+    const dist = 100 + Math.random() * 90;
     return {
       id: seed * 100 + i,
       dx: Math.cos(angle) * dist,
-      dy: Math.sin(angle) * dist * 0.8,
+      dy: Math.sin(angle) * dist * 0.35,
       rot: (Math.random() - 0.5) * 50,
       size: 12 + Math.round(Math.random() * 3) * 3,
       color: COLORS[i % COLORS.length]!,
@@ -79,11 +80,11 @@ export function HeartBurst({ active }: { active: boolean }) {
       {pieces.map((p) => (
         <motion.span
           key={p.id}
-          className="absolute top-8"
+          className="absolute top-12"
           initial={{ x: 0, y: 0, scale: 0.4, opacity: 1, rotate: 0 }}
           animate={{
             x: [0, p.dx, p.dx * 1.15],
-            y: [0, p.dy, p.dy + 140],
+            y: [0, p.dy, p.dy + 280],
             scale: [0.4, 1, 0.9],
             opacity: [1, 1, 0],
             rotate: [0, p.rot, p.rot * 1.5],

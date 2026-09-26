@@ -98,7 +98,7 @@ export function Segmented<T extends string>({
               className="bg-card shadow-card absolute inset-0 rounded-xl"
             />
           ) : null}
-          <span className="relative">{o.label}</span>
+          <span className="relative z-10">{o.label}</span>
         </button>
       ))}
     </div>
