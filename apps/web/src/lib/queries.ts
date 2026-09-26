@@ -33,6 +33,7 @@ export const keys = {
   absences: ['absences'] as const,
   fish: ['fish'] as const,
   healthTips: ['healthTips'] as const,
+  games: ['games'] as const,
 };
 
 /** Journal / slot coverage window. Latest completion per task is fetched separately. */
@@ -264,6 +265,10 @@ export function useRealtimeSync() {
       ['room_items', keys.room],
       ['room_items', keys.fish],
       ['fish_bonuses', keys.fish],
+      ['game_runs', keys.games],
+      ['game_runs', keys.fish],
+      ['game_achievements', keys.games],
+      ['game_achievements', keys.fish],
       ['duty_overrides', keys.overrides],
       ['absences', keys.absences],
       ['completions', keys.measurements],

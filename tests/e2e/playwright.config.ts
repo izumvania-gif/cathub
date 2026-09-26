@@ -20,7 +20,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
-    { name: 'api', testMatch: /(api|health|fish)\.spec\.ts/ },
+    { name: 'api', testMatch: /(api|health|fish|games)\.spec\.ts/ },
     { name: 'bot', testMatch: /bot\.spec\.ts/ },
     {
       name: 'web',

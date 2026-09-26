@@ -5,7 +5,10 @@
 export type Coat = 'brown' | 'grey' | 'ginger' | 'black' | 'blue' | 'cream' | 'white';
 export type Pattern = 'tabby' | 'solid' | 'bicolor' | 'calico' | 'point';
 export type Eyes = 'green' | 'gold' | 'copper' | 'blue' | 'odd';
-export type Accessory = 'none' | 'collar' | 'bell' | 'bow';
+import { ACCESSORY_LABELS, type GameAccessory } from '@cathub/core';
+
+/** Game accessories (crown, …) are earned by achievements, never bought. */
+export type Accessory = 'none' | 'collar' | 'bell' | 'bow' | GameAccessory;
 
 export interface CatLook {
   coat: Coat;
@@ -62,7 +65,12 @@ export const ACCESSORIES: Record<Accessory, string> = {
   collar: 'Ошейник',
   bell: 'Колокольчик',
   bow: 'Бантик',
+  ...ACCESSORY_LABELS,
 };
+
+/** Accessories anyone can pick; the rest come from game achievements. */
+export const FREE_ACCESSORIES: Accessory[] = ['none', 'collar', 'bell', 'bow'];
+export const isGameAccessory = (a: Accessory): a is GameAccessory => !FREE_ACCESSORIES.includes(a);
 
 const base: CatLook = {
   coat: 'brown',
@@ -128,7 +136,7 @@ export function randomLook(rand = Math.random): CatLook {
     eyes: any(Object.keys(EYES) as Eyes[]),
     fluffy: rand() < 0.3,
     socks: rand() < 0.3,
-    accessory: any(Object.keys(ACCESSORIES) as Accessory[]),
+    accessory: any(FREE_ACCESSORIES),
     accessoryColor: any(['#e2563a', '#4a4fc4', '#35a374', '#f5b62e', '#e85d9c']),
   };
 }

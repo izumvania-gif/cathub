@@ -113,6 +113,15 @@ pnpm-workspaces monorepo:
   those fields. Perfect-day bonuses go to `fish_bonuses`. The balance is the `fish_balance` view;
   `pb_hooks/room.pb.js` sells items (prices in `pb_hooks/lib/room.js` must match core's
   `ROOM_CATALOG`, a bot test checks it). The web app adds not-yet-priced marks locally (`lib/fish.ts`).
+- Mini-games (docs/PLAN.md, Phase 7): `apps/web/src/games/<game>/logic.ts` is pure, seeded,
+  fixed-step logic (unit tests play it with bots to check balance); `<Game>.tsx` draws it on a
+  canvas via `games/engine.ts` (`useStage`, `useLoop`, `drawCat`) or, for cards, plain DOM.
+  `pages/Play.tsx` is the shell (rules, pause, result), `pages/Games.tsx` the list, records and
+  achievements. Fish are priced only by `POST /api/cathub/games/finish` (`pb_hooks/games.pb.js`,
+  rules in `pb_hooks/lib/games.js` = core's `GAME_RULES`, a bot test compares them): score tiers,
+  10 🐟 a day per person, believability bounds, achievements (one-off fish or an earned-only cat
+  accessory: crown, propeller cap, medal, fisher hat). Games never change the cat's mood.
+  Sounds are WebAudio (`games/sound.ts`), off by default.
 - Other hooks: `rotation.pb.js` (after a completion the assignee moves to the next person in
   `tasks.rotation`; undone on delete), `backups.pb.js` (backup cron/S3 from `BACKUP_*` env on start),
   `users.pb.js` (default digest time).

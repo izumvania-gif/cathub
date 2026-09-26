@@ -76,6 +76,23 @@ async function screens(page: Page) {
   await page.goto('/duties');
   await expect(page.getByRole('heading', { name: 'Обязанности' })).toBeVisible();
   found.push(...(await scan(page, 'duties')));
+  await page.goto('/games');
+  await expect(page.getByRole('heading', { name: 'Достижения' })).toBeVisible();
+  await page.waitForTimeout(400);
+  found.push(...(await scan(page, 'games')));
+  for (const game of ['jump', 'defense', 'cards', 'fishing']) {
+    await page.goto(`/games/${game}`);
+    await expect(page.getByRole('button', { name: 'Играть' })).toBeVisible();
+    await page.waitForTimeout(400);
+    found.push(...(await scan(page, `game-intro-${game}`)));
+  }
+  // Mid-game screens (canvas plus controls).
+  for (const game of ['defense', 'cards']) {
+    await page.goto(`/games/${game}`);
+    await page.getByRole('button', { name: 'Играть' }).click();
+    await page.waitForTimeout(700);
+    found.push(...(await scan(page, `game-${game}`)));
+  }
   return found;
 }
 

@@ -25,6 +25,8 @@ const Diagnostics = lazy(() =>
 const Health = lazy(() => import('./pages/Health').then((m) => ({ default: m.Health })));
 const Household = lazy(() => import('./pages/Household').then((m) => ({ default: m.Household })));
 const Duties = lazy(() => import('./pages/Duties').then((m) => ({ default: m.Duties })));
+const Games = lazy(() => import('./pages/Games').then((m) => ({ default: m.Games })));
+const Play = lazy(() => import('./pages/Play').then((m) => ({ default: m.Play })));
 const Room = lazy(() => import('./pages/Room').then((m) => ({ default: m.Room })));
 const Journal = lazy(() => import('./pages/Journal').then((m) => ({ default: m.Journal })));
 const TaskEditor = lazy(() =>
@@ -108,6 +110,8 @@ function Shell() {
           <Route path="/home" component={Household} />
           <Route path="/room" component={Room} />
           <Route path="/duties" component={Duties} />
+          <Route path="/games" component={Games} />
+          <Route path="/games/:key">{(p) => <Play game={p.key} />}</Route>
           <Route>
             <Redirect to="/" />
           </Route>

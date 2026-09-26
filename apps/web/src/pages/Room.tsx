@@ -1,6 +1,8 @@
 import { FISH_PER_WEIGHT, PERFECT_DAY_FISH } from '@cathub/core';
 import { useQueryClient } from '@tanstack/react-query';
+import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
+import { Link } from 'wouter';
 import { toast } from 'sonner';
 import { CatScene } from '../cat/CatScene';
 import { ItemThumb } from '../cat/ItemThumb';
@@ -85,6 +87,22 @@ export function Room() {
           день — ещё +{PERFECT_DAY_FISH}. Рыбки общие на семью, настоящих денег тут нет.
         </p>
       </section>
+
+      <Link
+        href="/games"
+        className="bg-ink text-paper shadow-card hover:bg-ink/90 mt-4 flex min-h-14 items-center gap-3 rounded-3xl px-4 font-semibold transition-[transform,background-color] active:scale-[0.99]"
+      >
+        <span aria-hidden className="text-2xl">
+          🎮
+        </span>
+        <span className="flex-1">
+          Мини-игры
+          <span className="text-paper/70 block text-xs font-medium">
+            Прыг-скок, оборона кухни, карты, рыбалка
+          </span>
+        </span>
+        <ChevronRight aria-hidden />
+      </Link>
 
       <h2 className="text-ink-soft mt-6 mb-2 px-1 text-sm font-semibold">Магазин</h2>
       <ul className="bg-card divide-line divide-y overflow-hidden rounded-3xl shadow-card">

@@ -683,6 +683,17 @@ export function renderFrame(
     tongue: rgb('#e76f86'),
     acc: rgb(look.accessoryColor),
     gold: rgb('#f2c14e'),
+    goldDark: rgb('#c8902a'),
+    goldLight: rgb('#fff1b8'),
+    gem: rgb('#e2563a'),
+    ribbon: rgb('#4a4fc4'),
+    cap: rgb('#e2563a'),
+    capLight: rgb('#f08a70'),
+    blade: rgb('#f5b62e'),
+    blade2: rgb('#4a9fe0'),
+    hat: rgb('#8a9a5b'),
+    hatDark: rgb('#6b7a42'),
+    hatBand: rgb('#e2563a'),
   };
   const shade = (c: RGB, k: number): RGB =>
     c.map((v, i) => Math.round(v + (C.outline[i]! - v) * k)) as RGB;
@@ -931,6 +942,64 @@ export function renderFrame(
     ] as const)
       set(bx + dx, by + dy, C.acc);
     set(bx + 1, by, shade(C.acc, 0.3));
+  } else if (look.accessory === 'medal') {
+    // A ribbon where the collar goes, with a cheese medal hanging where the bell would.
+    const inHead = headShape(pose, look.fluffy);
+    let hang: [number, number] | null = null;
+    for (let y = hy + 2; y < FRAME_H; y++)
+      for (let x = hx - 6; x <= hx + 6; x++) {
+        const c = at(x, y);
+        if (!c || c.part === Part.None || inHead(x + 0.5, y + 0.5 - OY)) continue;
+        if (inHead(x + 0.5, y - 0.5 - OY)) {
+          set(x, y, C.ribbon);
+          if (x === hx - 1 && !hang) hang = [x, y + 1];
+        }
+      }
+    if (hang) {
+      const [mx, my] = hang;
+      for (const [dx, dy] of [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1],
+      ] as const)
+        set(mx + dx, my + dy, C.gold);
+      set(mx, my, C.goldLight);
+      set(mx, my + 2, C.goldDark);
+      set(mx + 1, my + 2, C.goldDark);
+    }
+  } else if (look.accessory !== 'none') {
+    // Hats sit on the top of the head, between the ears.
+    let top = hy;
+    for (let y = 0; y < hy; y++)
+      if ([-1, 0, 1].some((dx) => at(hx + dx, y)?.part === Part.Head)) {
+        top = y;
+        break;
+      }
+    const row = (y: number, x0: number, x1: number, c: RGB) => {
+      for (let x = x0; x <= x1; x++) set(hx + x, y, c);
+    };
+    if (look.accessory === 'crown') {
+      row(top - 1, -3, 3, C.goldDark);
+      row(top - 2, -3, 3, C.gold);
+      for (const dx of [-3, 0, 3]) set(hx + dx, top - 3, C.gold);
+      set(hx, top - 2, C.gem);
+    } else if (look.accessory === 'propeller') {
+      row(top - 1, -3, 4, C.cap);
+      row(top - 1, 4, 6, shade(C.cap, 0.35)); // visor
+      row(top - 2, -2, 2, C.cap);
+      set(hx - 1, top - 2, C.capLight);
+      set(hx, top - 3, C.outline);
+      row(top - 4, -3, -1, C.blade);
+      row(top - 4, 1, 3, C.blade2);
+      set(hx, top - 4, C.outline);
+    } else if (look.accessory === 'fisher') {
+      row(top - 1, -5, 5, C.hatDark);
+      row(top - 2, -3, 3, C.hat);
+      row(top - 3, -2, 2, C.hat);
+      set(hx + 2, top - 2, C.hatBand);
+      set(hx + 3, top - 2, C.hatBand);
+    }
   }
   return out;
 }

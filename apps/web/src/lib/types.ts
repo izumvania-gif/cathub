@@ -1,3 +1,4 @@
+import type { GameKey } from '@cathub/core';
 import type {
   AssignMode,
   DutyZones,
@@ -157,4 +158,31 @@ export interface Supply extends RecordModel {
   daily_usage: number;
   low_days: number;
   template_key: string;
+}
+
+export interface GameRunRec extends RecordModel {
+  household: string;
+  user: string;
+  game: GameKey;
+  score: number;
+  stats: Record<string, number>;
+  fish: number;
+  duration_ms: number;
+  created: string;
+}
+
+export interface GameAchievementRec extends RecordModel {
+  household: string;
+  user: string;
+  key: string;
+  fish: number;
+  created: string;
+}
+
+export interface GameRecordRec extends RecordModel {
+  household: string;
+  user: string;
+  game: GameKey;
+  best: number;
+  runs: number;
 }

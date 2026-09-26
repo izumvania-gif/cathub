@@ -1,18 +1,33 @@
 import { useState } from 'react';
 import { CatSprite } from './CatScene';
-import { ACCESSORIES, COATS, EYES, PATTERNS, PRESETS, randomLook, type CatLook } from './look';
+import {
+  ACCESSORIES,
+  COATS,
+  EYES,
+  isGameAccessory,
+  PATTERNS,
+  PRESETS,
+  randomLook,
+  type Accessory,
+  type CatLook,
+} from './look';
 
 /** Presets plus fine-tuning of the pixel cat's look (profile, onboarding, /cat-lab). */
 export function LookEditor({
   look,
   onChange,
   collapsible = false,
+  unlocked,
 }: {
   look: CatLook;
   onChange: (look: CatLook) => void;
   /** Start with presets only and a "Настроить" button. */
   collapsible?: boolean;
+  /** Game accessories the family has earned; the others show locked. All when omitted. */
+  unlocked?: ReadonlySet<Accessory>;
 }) {
+  const locked = (a: Accessory) =>
+    Boolean(unlocked) && isGameAccessory(a) && !unlocked!.has(a) && a !== look.accessory;
   const [open, setOpen] = useState(!collapsible);
   const set = <K extends keyof CatLook>(k: K, v: CatLook[K]) => onChange({ ...look, [k]: v });
   return (
@@ -55,6 +70,8 @@ export function LookEditor({
             value={look.accessory}
             options={ACCESSORIES}
             onChange={(v) => set('accessory', v)}
+            disabled={locked}
+            lockedLabel={(label) => `🔒 ${label} (из игр)`}
           />
           <label className="flex items-center gap-2">
             <input
@@ -98,11 +115,15 @@ function Select<T extends string>({
   value,
   options,
   onChange,
+  disabled,
+  lockedLabel,
 }: {
   label: string;
   value: T;
   options: Record<T, string | { label: string }>;
   onChange: (v: T) => void;
+  disabled?: (v: T) => boolean;
+  lockedLabel?: (label: string) => string;
 }) {
   return (
     <label className="grid min-w-0 gap-1">
@@ -114,9 +135,11 @@ function Select<T extends string>({
       >
         {(Object.keys(options) as T[]).map((k) => {
           const o = options[k];
+          const text = typeof o === 'string' ? o : o.label;
+          const off = disabled?.(k) ?? false;
           return (
-            <option key={k} value={k}>
-              {typeof o === 'string' ? o : o.label}
+            <option key={k} value={k} disabled={off}>
+              {off && lockedLabel ? lockedLabel(text) : text}
             </option>
           );
         })}

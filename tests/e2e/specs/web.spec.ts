@@ -363,3 +363,38 @@ test('age tips: a kitten gets its vaccine course; add to chores, hide, record as
   await page.getByRole('link', { name: 'Дела' }).click();
   await expect(page.getByRole('link', { name: /Глистогонка перед прививкой/ })).toBeVisible();
 });
+
+test('games: play a round of fishing, get fish, see the record and the achievements', async ({
+  page,
+}) => {
+  await page.clock.install();
+  await onboard(page);
+  await page.goto('/room');
+  await page.getByRole('link', { name: /Мини-игры/ }).click();
+  await expect(page.getByRole('heading', { name: 'Игры' })).toBeVisible();
+  await expect(page.getByText(/ещё дадут до 10 🐟/)).toBeVisible();
+  await page.getByRole('link', { name: /Рыбалка/ }).click();
+  await page.getByRole('button', { name: 'Играть' }).click();
+  const tank = page.getByRole('img', { name: /Аквариум/ });
+  await expect(tank).toBeVisible();
+
+  // Play the 45 s on the fake clock: tap every 0.2 s (the paw rests after misses).
+  const box = (await tank.boundingBox())!;
+  for (let i = 0; i < 240; i++) {
+    await page.clock.runFor(200);
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  }
+  await page.clock.runFor(2000);
+  await expect(page.getByText('Итог')).toBeVisible();
+  await expect(page.getByText(/в копилку|Рыбки начинаются|короткая/)).toBeVisible();
+  await page.getByRole('link', { name: 'К играм' }).click();
+  await expect(page.getByText(/твой рекорд \d+/)).toBeVisible();
+
+  // The pause button stops a game and the exit leaves it.
+  await page.getByRole('link', { name: /Прыг-скок/ }).click();
+  await page.getByRole('button', { name: 'Играть' }).click();
+  await page.getByRole('button', { name: 'Пауза' }).click();
+  await expect(page.getByRole('button', { name: 'Продолжить' }).first()).toBeVisible();
+  await page.getByRole('link', { name: 'Выйти из игры' }).click();
+  await expect(page.getByRole('heading', { name: 'Игры' })).toBeVisible();
+});

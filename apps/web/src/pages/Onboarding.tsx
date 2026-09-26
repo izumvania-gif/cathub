@@ -11,7 +11,7 @@ import { DEFAULT_TZ } from '../lib/board';
 import { errorMessage, pb, toPbDate } from '../lib/pb';
 import { scheduleFromTemplate } from '../lib/templates';
 import type { Household } from '../lib/types';
-import { DEFAULT_LOOK, type CatLook } from '../cat/look';
+import { DEFAULT_LOOK, type Accessory, type CatLook } from '../cat/look';
 import { LookEditor } from '../cat/LookEditor';
 
 function detectTz() {
@@ -42,6 +42,8 @@ export function Onboarding() {
   const [catName, setCatName] = useState('');
   const [birth, setBirth] = useState('');
   const [look, setLook] = useState<CatLook>(DEFAULT_LOOK);
+  // A new household has earned nothing yet.
+  const unlocked = new Set<Accessory>();
   const [answers, setAnswers] = useState<OnboardingAnswers>({
     outdoor: false,
     longHair: false,
@@ -177,7 +179,7 @@ export function Onboarding() {
                 <span className="text-ink-soft text-sm font-medium">
                   Какой он? Выберите похожего — его можно настроить потом
                 </span>
-                <LookEditor look={look} onChange={setLook} collapsible />
+                <LookEditor look={look} onChange={setLook} collapsible unlocked={unlocked} />
               </section>
               <Field label="Дата рождения" hint="Можно примерно. Пожилым котам осмотр нужен чаще.">
                 <Input type="date" value={birth} onChange={(e) => setBirth(e.target.value)} />

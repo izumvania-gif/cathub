@@ -55,6 +55,13 @@ function CatHero({
       >
         <FishPill balance={fish.balance} />
       </Link>
+      <Link
+        href="/games"
+        className="bg-card text-ink shadow-card absolute top-3 right-3 z-10 inline-flex min-h-8 items-center gap-1 rounded-full px-3 text-sm font-semibold"
+        aria-label="Мини-игры"
+      >
+        <span aria-hidden>🎮</span> Игры
+      </Link>
       <CatScene
         look={look}
         mood={mood}

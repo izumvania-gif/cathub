@@ -6,6 +6,7 @@ import { Link } from 'wouter';
 import { Avatar, Button, Field, Input, PageHeader, Toggle } from '../components/ui';
 import { logout, refreshAuth, useUser } from '../lib/auth';
 import { exportJournalCsv, exportJson } from '../lib/export';
+import { useUnlockedAccessories } from '../lib/games';
 import { inviteLink } from '../lib/invite';
 import { errorMessage, pb, toIso, toPbDate } from '../lib/pb';
 import { keys, useCat, useHousehold, useMembers } from '../lib/queries';
@@ -88,6 +89,7 @@ function CatForm({ cat }: { cat: Cat }) {
     vet_clinic: cat.vet_clinic,
   });
   const [look, setLook] = useState(() => normalizeLook(cat.appearance));
+  const unlocked = useUnlockedAccessories();
   const [busy, setBusy] = useState(false);
 
   const save = async () => {
@@ -152,7 +154,7 @@ function CatForm({ cat }: { cat: Cat }) {
             label={`${form.name || 'Кот'}: как выглядит`}
           />
         </div>
-        <LookEditor look={look} onChange={setLook} collapsible />
+        <LookEditor look={look} onChange={setLook} collapsible unlocked={unlocked} />
       </section>
       <Field label="Номер чипа">
         <Input
