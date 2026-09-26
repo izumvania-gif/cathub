@@ -9,6 +9,8 @@ describe('game rules', () => {
       'utf8',
     );
     const json = /\/\* RULES \*\/([\s\S]*?)\/\* END RULES \*\//.exec(src)?.[1];
-    expect(JSON.parse(json!)).toEqual(JSON.parse(JSON.stringify(GAME_RULES)));
+    // An object literal (Prettier keeps it as JS, not JSON), so evaluate it.
+    const hook: unknown = new Function(`return ${json!}`)();
+    expect(hook).toEqual(JSON.parse(JSON.stringify(GAME_RULES)));
   });
 });
