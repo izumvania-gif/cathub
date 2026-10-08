@@ -6,13 +6,14 @@ import { Link } from 'wouter';
 import { Avatar, Button, Field, Input, PageHeader, Toggle } from '../components/ui';
 import { logout, refreshAuth, useUser } from '../lib/auth';
 import { exportJournalCsv, exportJson } from '../lib/export';
+import { useEditForm } from '../lib/editForm';
 import { useUnlockedAccessories } from '../lib/games';
 import { inviteLink } from '../lib/invite';
 import { errorMessage, pb, toIso, toPbDate } from '../lib/pb';
 import { keys, useCat, useHousehold, useMembers } from '../lib/queries';
 import type { Cat } from '../lib/types';
 import { CatSprite } from '../cat/CatScene';
-import { normalizeLook } from '../cat/look';
+import { normalizeLook, type CatLook } from '../cat/look';
 import { LookEditor } from '../cat/LookEditor';
 
 const TIMEZONES = [
@@ -77,34 +78,57 @@ export function InviteCard({ code, onRotate }: { code: string; onRotate?: () => 
   );
 }
 
+/** "YYYY-MM-DD" of a stored date in the device's time zone (dates are saved at local noon). */
+function localYmd(pbDate: string) {
+  const d = new Date(toIso(pbDate));
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function CatForm({ cat }: { cat: Cat }) {
   const qc = useQueryClient();
-  const [form, setForm] = useState({
-    name: cat.name,
-    birth: cat.birth_date ? toIso(cat.birth_date).slice(0, 10) : '',
-    outdoor: cat.outdoor,
-    long_hair: cat.long_hair,
-    neutered: cat.neutered,
-    chip_number: cat.chip_number,
-    vet_clinic: cat.vet_clinic,
-  });
-  const [look, setLook] = useState(() => normalizeLook(cat.appearance));
+  // Follows the server's copy (the form may open from the offline cache) and saves only what
+  // was changed, so an old value on screen is never written back.
+  const form = useEditForm(
+    {
+      name: cat.name,
+      birth: cat.birth_date ? localYmd(cat.birth_date) : '',
+      outdoor: cat.outdoor,
+      long_hair: cat.long_hair,
+      neutered: cat.neutered,
+      chip_number: cat.chip_number,
+      vet_clinic: cat.vet_clinic,
+      look: normalizeLook(cat.appearance),
+    },
+    cat.updated,
+  );
+  const v = form.values;
+  const setForm = form.set;
+  const look = v.look;
+  const setLook = (look: CatLook) => form.set({ look });
   const unlocked = useUnlockedAccessories();
   const [busy, setBusy] = useState(false);
 
   const save = async () => {
+    const ch = form.changes();
+    if (!Object.keys(ch).length) {
+      toast.success('Сохранено');
+      return;
+    }
     setBusy(true);
     try {
-      await pb.collection('cats').update(cat.id, {
-        name: form.name.trim(),
-        birth_date: form.birth ? toPbDate(new Date(`${form.birth}T12:00:00`)) : '',
-        outdoor: form.outdoor,
-        long_hair: form.long_hair,
-        neutered: form.neutered,
-        chip_number: form.chip_number.trim(),
-        vet_clinic: form.vet_clinic.trim(),
-        appearance: look,
-      });
+      const body: Record<string, unknown> = {};
+      if (ch.name !== undefined) body.name = ch.name.trim();
+      if (ch.birth !== undefined)
+        body.birth_date = ch.birth ? toPbDate(new Date(`${ch.birth}T12:00:00`)) : '';
+      if (ch.outdoor !== undefined) body.outdoor = ch.outdoor;
+      if (ch.long_hair !== undefined) body.long_hair = ch.long_hair;
+      if (ch.neutered !== undefined) body.neutered = ch.neutered;
+      if (ch.chip_number !== undefined) body.chip_number = ch.chip_number.trim();
+      if (ch.vet_clinic !== undefined) body.vet_clinic = ch.vet_clinic.trim();
+      if (ch.look !== undefined) body.appearance = ch.look;
+      await pb.collection('cats').update(cat.id, body);
+      form.saved(ch);
       await qc.invalidateQueries({ queryKey: keys.cat });
       toast.success('Сохранено');
     } catch (err) {
@@ -117,56 +141,47 @@ function CatForm({ cat }: { cat: Cat }) {
   return (
     <div className="grid gap-4">
       <Field label="Имя">
-        <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <Input value={v.name} onChange={(e) => setForm({ name: e.target.value })} />
       </Field>
       <Field label="Дата рождения">
-        <Input
-          type="date"
-          value={form.birth}
-          onChange={(e) => setForm({ ...form, birth: e.target.value })}
-        />
+        <Input type="date" value={v.birth} onChange={(e) => setForm({ birth: e.target.value })} />
       </Field>
       <div className="bg-card divide-line divide-y rounded-3xl px-4 shadow-card">
         <Toggle
           label="Гуляет на улице"
-          checked={form.outdoor}
-          onChange={(v) => setForm({ ...form, outdoor: v })}
+          checked={v.outdoor}
+          onChange={(on) => setForm({ outdoor: on })}
         />
         <Toggle
           label="Длинная шерсть"
-          checked={form.long_hair}
-          onChange={(v) => setForm({ ...form, long_hair: v })}
+          checked={v.long_hair}
+          onChange={(on) => setForm({ long_hair: on })}
         />
         <Toggle
           label="Стерилизован(а)"
-          checked={form.neutered}
-          onChange={(v) => setForm({ ...form, neutered: v })}
+          checked={v.neutered}
+          onChange={(on) => setForm({ neutered: on })}
         />
       </div>
       <section aria-label="Внешность кота" className="bg-card rounded-3xl p-4 shadow-card">
         <h3 className="font-medium">Внешность</h3>
         <p className="text-ink-soft mb-3 text-sm">Пиксельный кот на главном экране</p>
         <div className="mb-3 flex justify-center">
-          <CatSprite
-            look={look}
-            anim="sit"
-            scale={3}
-            label={`${form.name || 'Кот'}: как выглядит`}
-          />
+          <CatSprite look={look} anim="sit" scale={3} label={`${v.name || 'Кот'}: как выглядит`} />
         </div>
         <LookEditor look={look} onChange={setLook} collapsible unlocked={unlocked} />
       </section>
       <Field label="Номер чипа">
         <Input
-          value={form.chip_number}
-          onChange={(e) => setForm({ ...form, chip_number: e.target.value })}
+          value={v.chip_number}
+          onChange={(e) => setForm({ chip_number: e.target.value })}
           inputMode="numeric"
         />
       </Field>
       <Field label="Клиника и ветеринар">
         <Input
-          value={form.vet_clinic}
-          onChange={(e) => setForm({ ...form, vet_clinic: e.target.value })}
+          value={v.vet_clinic}
+          onChange={(e) => setForm({ vet_clinic: e.target.value })}
           placeholder="Название, телефон"
         />
       </Field>

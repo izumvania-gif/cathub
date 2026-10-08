@@ -111,6 +111,42 @@ test('household page: invite code and Telegram settings', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Выбрать чат в Telegram' })).toBeVisible();
 });
 
+test('cat profile: a changed birth date survives a quick reload and the next save', async ({
+  page,
+}) => {
+  await onboard(page);
+  const birthInDb = () =>
+    page.evaluate(async () => {
+      const a = JSON.parse(localStorage.getItem('pocketbase_auth')!);
+      const r = await fetch('/api/collections/cats/records', {
+        headers: { Authorization: a.token },
+      });
+      return ((await r.json()).items[0].birth_date as string).slice(0, 10);
+    });
+  await page.getByRole('link', { name: 'Дом' }).click();
+  const birth = page.getByLabel('Дата рождения');
+  await birth.fill('2026-05-01');
+  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await expect(page.getByText('Сохранено')).toBeVisible();
+  await page.waitForTimeout(2500); // the offline cache has caught up
+
+  // Change it, then reload at once: the offline cache still has the old date.
+  await page.reload();
+  await birth.fill('2026-07-20');
+  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await expect.poll(birthInDb).toBe('2026-07-20');
+  await page.reload();
+  // The form shows the new date once the server answers, not the cached one.
+  await expect(birth).toHaveValue('2026-07-20');
+
+  // Saving another field must not bring the old date back.
+  await page.getByLabel('Номер чипа').fill('643094100000001');
+  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await expect(page.getByText('Сохранено').last()).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(await birthInDb()).toBe('2026-07-20');
+});
+
 test('health: record weights, see the chart, add a vaccination that completes the task', async ({
   page,
 }) => {
