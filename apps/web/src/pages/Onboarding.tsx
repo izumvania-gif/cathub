@@ -1,7 +1,7 @@
 import { describeSchedule, TASK_TEMPLATES, type OnboardingAnswers } from '@cathub/core';
 import clsx from 'clsx';
 import { Check } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { Button, Field, Input, Segmented, Toggle } from '../components/ui';
 import { InviteCard } from './Household';
@@ -10,7 +10,7 @@ import { PENDING_CODE_KEY } from '../lib/invite';
 import { DEFAULT_TZ } from '../lib/board';
 import { errorMessage, pb, toPbDate } from '../lib/pb';
 import { scheduleFromTemplate } from '../lib/templates';
-import type { Household } from '../lib/types';
+import type { Household, User } from '../lib/types';
 import { DEFAULT_LOOK, type Accessory, type CatLook } from '../cat/look';
 import { LookEditor } from '../cat/LookEditor';
 
@@ -21,6 +21,15 @@ function detectTz() {
     return DEFAULT_TZ;
   }
 }
+
+/** The household the server has for this user (the local auth copy may not know it yet). */
+async function serverHousehold() {
+  const me = await pb.collection('users').getOne<User>(pb.authStore.record!.id);
+  return me.household;
+}
+
+/** An invite code as the server compares it (pb_hooks/lib/household.js). */
+const normalizeCode = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 function ageYears(birth: string) {
   if (!birth) return null;
@@ -58,17 +67,37 @@ export function Onboarding() {
   const [busy, setBusy] = useState(false);
   const fullAnswers = { ...answers, ageYears: ageYears(birth) };
 
+  /** What a «Готово» that failed half-way already created, so a retry carries on from there. */
+  const made = useRef<{ household?: Household; cat?: string; tasks: Set<string> }>({
+    tasks: new Set(),
+  });
+
   const join = async () => {
     setBusy(true);
     setError('');
     try {
-      await pb.send('/api/cathub/join', { method: 'POST', body: { code } });
+      try {
+        await pb.send('/api/cathub/join', { method: 'POST', body: { code } });
+      } catch (err) {
+        // A retry after the join went through but the answer was lost: already in that family
+        // (not in a half-made household of one's own, which also makes the join fail).
+        const existing = await serverHousehold().catch(() => '');
+        const joined =
+          existing &&
+          (await pb
+            .collection('households')
+            .getOne<Household>(existing)
+            .then((x) => x.invite_code === normalizeCode(code))
+            .catch(() => false));
+        if (!joined) throw err;
+      }
       try {
         localStorage.removeItem(PENDING_CODE_KEY);
       } catch {
         /* ignore */
       }
-      await refreshAuth();
+      // The join is done; if this refresh fails, the app's start-up refresh picks it up.
+      await refreshAuth().catch(() => window.location.reload());
       navigate('/');
     } catch (err) {
       setError(errorMessage(err));
@@ -82,25 +111,64 @@ export function Onboarding() {
     setError('');
     try {
       const tz = detectTz();
-      const h = await pb.send<Household>('/api/cathub/household', {
-        method: 'POST',
-        body: { name: `Дом ${catName.trim()}`, timezone: tz },
-      });
+      const done = made.current;
+      const retry = Boolean(done.household);
+      if (!done.household) {
+        // A failed earlier try may have created the household already (the server makes the
+        // user its owner in the same step): carry on with it instead of a second one.
+        const existing = await serverHousehold();
+        if (existing) {
+          const cats = await pb
+            .collection('cats')
+            .getList(1, 1, { filter: pb.filter('household = {:h}', { h: existing }) });
+          if (cats.items.length) {
+            // Not a half-made one: this user is in a household that's set up.
+            await refreshAuth();
+            navigate('/');
+            return;
+          }
+          done.household = await pb.collection('households').getOne<Household>(existing);
+        } else
+          done.household = await pb.send<Household>('/api/cathub/household', {
+            method: 'POST',
+            body: { name: `Дом ${catName.trim()}`, timezone: tz },
+          });
+      }
+      const h = done.household;
       // Access rules read the user's household from the database, so no auth refresh is
       // needed yet; refreshing now would switch the app away from the invite step.
-      const cat = await pb.collection('cats').create({
-        household: h.id,
+      const cat = {
         name: catName.trim(),
-        ...(birth ? { birth_date: toPbDate(new Date(`${birth}T12:00:00`)) } : {}),
+        birth_date: birth ? toPbDate(new Date(`${birth}T12:00:00`)) : '',
         outdoor: answers.outdoor,
         long_hair: answers.longHair,
         appearance: look,
-      });
+      };
+      if (retry) {
+        // An earlier try may have saved more than it heard back about (a lost answer): take
+        // what the server has instead of making it twice.
+        const [cats, tasks] = await Promise.all([
+          pb.collection('cats').getList(1, 1, {
+            filter: pb.filter('household = {:h}', { h: h.id }),
+            sort: 'created',
+          }),
+          pb.collection('tasks').getFullList<{ template_key: string }>({
+            filter: pb.filter('household = {:h}', { h: h.id }),
+            fields: 'template_key',
+          }),
+        ]);
+        done.cat ??= cats.items[0]?.id;
+        for (const t of tasks) if (t.template_key) done.tasks.add(t.template_key);
+      }
+      // On a retry the cat may have been edited after «Назад»: save what the form says now.
+      if (done.cat) await pb.collection('cats').update(done.cat, cat);
+      else done.cat = (await pb.collection('cats').create({ household: h.id, ...cat })).id;
       const templates = TASK_TEMPLATES.filter((t) => picked.has(t.key));
       for (const [i, t] of templates.entries()) {
+        if (done.tasks.has(t.key)) continue;
         await pb.collection('tasks').create({
           household: h.id,
-          cat: cat.id,
+          cat: done.cat,
           title: t.title,
           emoji: t.emoji,
           category: t.category,
@@ -111,6 +179,7 @@ export function Onboarding() {
           medical: t.medical,
           sort: i,
         });
+        done.tasks.add(t.key);
       }
       setHousehold(h);
       setStep(3);

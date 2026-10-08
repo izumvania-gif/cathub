@@ -3,7 +3,7 @@ import { useState } from 'react';
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 /** Fields of `values` that differ from `base` (what the user changed). */
-export function diff<T extends Record<string, unknown>>(values: T, base: T): Partial<T> {
+export function diff<T extends object>(values: T, base: T): Partial<T> {
   const out: Partial<T> = {};
   for (const k of Object.keys(values) as Array<keyof T>)
     if (!same(values[k], base[k])) out[k] = values[k];
@@ -11,7 +11,7 @@ export function diff<T extends Record<string, unknown>>(values: T, base: T): Par
 }
 
 /** New server data: untouched fields follow the server, edited ones keep the user's value. */
-export function rebase<T extends Record<string, unknown>>(values: T, base: T, server: T): T {
+export function rebase<T extends object>(values: T, base: T, server: T): T {
   const next = { ...values };
   for (const k of Object.keys(server) as Array<keyof T>)
     if (same(values[k], base[k])) next[k] = server[k];
@@ -29,7 +29,7 @@ export function rebase<T extends Record<string, unknown>>(values: T, base: T, se
  * - `changes()` returns only the fields the user changed, so a save never writes back an old
  *   value the form happened to be showing.
  */
-export function useEditForm<T extends Record<string, unknown>>(server: T, version: string) {
+export function useEditForm<T extends object>(server: T, version: string) {
   const [base, setBase] = useState(server);
   const [values, setValues] = useState(server);
   const [seen, setSeen] = useState(version);
@@ -45,6 +45,8 @@ export function useEditForm<T extends Record<string, unknown>>(server: T, versio
 
   return {
     values,
+    /** The server state the edits are relative to. */
+    base,
     set: (patch: Partial<T>) => setValues((v) => ({ ...v, ...patch })),
     changes,
     dirty: Object.keys(changes()).length > 0,

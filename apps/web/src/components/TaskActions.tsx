@@ -1,7 +1,7 @@
 import { describeSchedule, describeWhen } from '@cathub/core';
 import { TZDate } from '@date-fns/tz';
 import { addDays } from 'date-fns';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Link } from 'wouter';
 import { useTaskActions } from '../lib/actions';
@@ -80,20 +80,36 @@ export function TaskActionsSheet({
   const [when, setWhen] = useState(() => localInputValue(new Date()));
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
+  // Another task's sheet starts from the menu, with nothing typed.
+  const [shownId, setShownId] = useState(item?.task.id);
+  if (item?.task.id !== shownId) {
+    setShownId(item?.task.id);
+    setMode('menu');
+    setValue('');
+    setWhen(localInputValue(now));
+  }
+  // Which task the sheet shows now (a slow action must not close a sheet opened after it).
+  const shown = useRef(item?.task.id);
+  useEffect(() => {
+    shown.current = item?.task.id;
+  });
 
   const close = () => {
     setMode('menu');
     setValue('');
+    setWhen(localInputValue(new Date()));
     onClose();
   };
   const task = item?.task;
   const track = task?.track_value;
 
   const act = async (fn: () => Promise<unknown>) => {
+    const id = task?.id;
     setBusy(true);
     try {
-      await fn();
-      close();
+      // false = it failed and already said so: keep the sheet (and what was typed) open.
+      if ((await fn()) === false) return;
+      if (shown.current === id) close();
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -186,8 +202,18 @@ export function TaskActionsSheet({
               </Field>
               <Button
                 busy={busy}
+                disabled={
+                  !when || (track ? numericValue === null || Number.isNaN(numericValue) : false)
+                }
                 onClick={() =>
-                  act(() => flow.run(task, { at: new Date(when), value: numericValue }))
+                  act(async () => {
+                    // The picker has a max, but a typed time can still be ahead.
+                    if (new Date(when).getTime() > Date.now() + 60_000) {
+                      toast.error('Это время ещё не наступило');
+                      return false;
+                    }
+                    return flow.run(task, { at: new Date(when), value: numericValue });
+                  })
                 }
               >
                 Сохранить
@@ -205,7 +231,13 @@ export function TaskActionsSheet({
               >
                 {track ? 'Записать' : 'Сделано сейчас'}
               </Button>
-              <Button variant="secondary" onClick={() => setMode('backdate')}>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setWhen(localInputValue(new Date()));
+                  setMode('backdate');
+                }}
+              >
                 Сделано раньше…
               </Button>
               <div className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-2">

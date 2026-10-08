@@ -8,6 +8,7 @@ import {
   isQuietTime,
   localDate,
   localDayBounds,
+  nowAfterMarks,
   PERFECT_DAY_FISH,
   perfectDay,
   reminderPlan,
@@ -199,7 +200,16 @@ export class ReminderService {
     const tz = state.household.timezone || DEFAULT_TZ;
     for (const task of state.tasks) {
       const completions = completionsOf(state, task.id);
-      const opts = { now, tz, snoozedUntil: snoozeOf(state, task.id) };
+      // A phone whose clock is a little ahead stamps marks "in the future": count them anyway
+      // (only for this task's status; quiet hours and texts use the real time).
+      const opts = {
+        now: nowAfterMarks(
+          now,
+          completions.map((c) => c.doneAt),
+        ),
+        tz,
+        snoozedUntil: snoozeOf(state, task.id),
+      };
       const decision = reminderPlan(task.schedule, completions, opts, notifyLevel(task));
       if (!decision) continue;
       const ev = evaluate(task.schedule, completions, opts);
@@ -294,7 +304,14 @@ export class ReminderService {
       const { state, task } = found;
       const tz = state.household.timezone || DEFAULT_TZ;
       const occurrence = new Date(r.occurrence_at);
-      const ev = evaluate(task.schedule, completionsOf(state, task.id), { now, tz });
+      const marks = completionsOf(state, task.id);
+      const ev = evaluate(task.schedule, marks, {
+        now: nowAfterMarks(
+          now,
+          marks.map((c) => c.doneAt),
+        ),
+        tz,
+      });
       const stillPending =
         ev.due?.getTime() === occurrence.getTime() &&
         (ev.status === 'due' || ev.status === 'overdue' || ev.status === 'soon');

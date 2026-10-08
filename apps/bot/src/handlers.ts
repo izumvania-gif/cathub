@@ -1,4 +1,4 @@
-import { evaluate } from '@cathub/core';
+import { evaluate, nowAfterMarks } from '@cathub/core';
 import type { Bot, Context } from 'grammy';
 import { config } from './config';
 import { log } from './log';
@@ -134,14 +134,15 @@ export function registerHandlers(bot: Bot, { db, reminders, status }: HandlerDep
       return ctx.answerCallbackQuery({ text: 'Это дело больше не отслеживается.' });
     }
     const tz = state.household.timezone || DEFAULT_TZ;
-    const now = new Date();
-    const ev = evaluate(
-      task.schedule,
-      state.completions
-        .filter((c) => c.task === task.id)
-        .map((c) => ({ doneAt: c.done_at, kind: c.kind })),
-      { now, tz },
+    const marks = state.completions
+      .filter((c) => c.task === task.id)
+      .map((c) => ({ doneAt: c.done_at, kind: c.kind }));
+    // Also a mark from a phone whose clock is a little ahead (else it would be marked twice).
+    const now = nowAfterMarks(
+      new Date(),
+      marks.map((m) => m.doneAt),
     );
+    const ev = evaluate(task.schedule, marks, { now, tz });
     const pending =
       ev.due?.getTime() === cb.occurrence.getTime() &&
       ['due', 'overdue', 'soon'].includes(ev.status);

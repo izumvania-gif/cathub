@@ -145,6 +145,8 @@ export interface HealthRecord extends RecordModel {
   notes: string;
   files: string[];
   user: string;
+  /** The chore mark this record made, if any (it moves and goes with the record). */
+  completion: string;
   expand?: { user?: User };
 }
 

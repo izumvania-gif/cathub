@@ -14,6 +14,13 @@ export function Sheet({
   children: ReactNode;
 }) {
   const panel = useRef<HTMLDivElement>(null);
+  // Callers often pass a new onClose on every render; keep the latest one in a ref so the focus
+  // effect below runs only when the sheet opens or closes (it used to re-run on every keystroke,
+  // moving focus away and dropping typed characters).
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   // Dialog focus: move focus inside on open, keep Tab within the sheet, restore it on close.
   useEffect(() => {
@@ -30,7 +37,7 @@ export function Sheet({
       (first ?? panel.current)?.focus();
     }, 50);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
       if (e.key !== 'Tab') return;
       const list = focusables();
       if (!list.length) return;
@@ -50,7 +57,7 @@ export function Sheet({
       window.removeEventListener('keydown', onKey);
       previous?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   return (
     <AnimatePresence>

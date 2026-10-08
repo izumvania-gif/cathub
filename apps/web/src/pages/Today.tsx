@@ -164,7 +164,11 @@ export function Today() {
   const { items, now, tz, isLoading } = useBoard();
   const cat = useCat();
   const flow = useCompleteFlow();
-  const [open, setOpen] = useState<BoardItem | null>(null);
+  // The task id, not a snapshot: the sheet always shows the live item (who, due) while open.
+  const [openId, setOpen] = useState<string | null>(null);
+  const openItem = items.find((x) => x.task.id === openId) ?? null;
+  // The task went away (archived or deleted elsewhere): the sheet is closed, so forget it.
+  if (openId && !openItem && !isLoading) setOpen(null);
   const supplies = useSupplyForecasts();
   const members = useMembers();
   const nameOf = (id: string) => members.data?.find((m) => m.id === id)?.name;
@@ -218,7 +222,7 @@ export function Today() {
       now={now}
       tz={tz}
       onComplete={() => flow.request(i)}
-      onOpen={() => setOpen(i)}
+      onOpen={() => setOpen(i.task.id)}
       assignee={
         i.who.user ? (i.who.user === me?.id && family ? 'ты' : nameOf(i.who.user)) : undefined
       }
@@ -330,7 +334,7 @@ export function Today() {
         f={selectedSupply?.f ?? null}
         onClose={() => setOpenSupply(null)}
       />
-      <TaskActionsSheet item={open} now={now} tz={tz} onClose={() => setOpen(null)} />
+      <TaskActionsSheet item={openItem} now={now} tz={tz} onClose={() => setOpen(null)} />
       <DoubleCheckSheet
         item={flow.confirm}
         now={now}

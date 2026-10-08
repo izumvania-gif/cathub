@@ -18,6 +18,7 @@ import { Button, Field, Input } from '../components/ui';
 import { useUser } from '../lib/auth';
 import { useBoard, useDutyContext } from '../lib/board';
 import { useDutyActions } from '../lib/duties';
+import type { ZoneUpdate } from '../lib/zones';
 import { errorMessage } from '../lib/pb';
 import { useAbsences, useHousehold, useMembers } from '../lib/queries';
 import type { User } from '../lib/types';
@@ -74,12 +75,14 @@ function ZoneRow({
   category: TaskCategory;
   zone: DutyZone | undefined;
   members: User[];
-  onChange: (z: DutyZone | undefined) => void;
+  onChange: (fn: ZoneUpdate) => void;
 }) {
-  const [open, setOpen] = useState(Boolean(zone?.weekdays && Object.keys(zone.weekdays).length));
+  // Shown whenever there are per-day picks (they may arrive after the first render).
+  const [expanded, setExpanded] = useState(false);
+  const open = expanded || Boolean(zone?.weekdays && Object.keys(zone.weekdays).length);
   const label = CATEGORY_LABELS[category];
-  const set = (user: string, weekdays = zone?.weekdays) =>
-    onChange(user || (weekdays && Object.keys(weekdays).length) ? { user, weekdays } : undefined);
+  const norm = (z: DutyZone): DutyZone | undefined =>
+    z.user || (z.weekdays && Object.keys(z.weekdays).length) ? z : undefined;
   return (
     <li className="px-4 py-3">
       <div className="grid grid-cols-[6.5rem_1fr] items-center gap-3">
@@ -88,7 +91,7 @@ function ZoneRow({
           label={`${label}: кто отвечает`}
           value={zone?.user ?? ''}
           members={members}
-          onChange={(v) => set(v)}
+          onChange={(v) => onChange((z) => norm({ user: v, weekdays: z?.weekdays }))}
         />
       </div>
       {open ? (
@@ -102,10 +105,14 @@ function ZoneRow({
                 members={members}
                 empty="как обычно"
                 onChange={(v) => {
-                  const weekdays = { ...zone?.weekdays };
-                  if (v) weekdays[d] = v;
-                  else delete weekdays[d];
-                  set(zone?.user ?? '', weekdays);
+                  // Stay open while picking, also when the last per-day pick is cleared.
+                  setExpanded(true);
+                  onChange((z) => {
+                    const weekdays = { ...z?.weekdays };
+                    if (v) weekdays[d] = v;
+                    else delete weekdays[d];
+                    return norm({ user: z?.user ?? '', weekdays });
+                  });
                 }}
               />
             </label>
@@ -114,7 +121,7 @@ function ZoneRow({
       ) : (
         <button
           type="button"
-          onClick={() => setOpen(true)}
+          onClick={() => setExpanded(true)}
           className="text-ink-soft mt-1 text-sm underline underline-offset-4"
         >
           По дням недели по-разному
@@ -192,6 +199,17 @@ function Away({ members }: { members: User[] }) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const remove = async (id: string) => {
+    setRemoving(id);
+    try {
+      await actions.removeAbsence(id);
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setRemoving(null);
+    }
+  };
   const fmt = (d: string) =>
     new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' }).format(
       new Date(`${d}T12:00:00`),
@@ -239,8 +257,9 @@ function Away({ members }: { members: User[] }) {
                 {mine ? (
                   <button
                     type="button"
-                    onClick={() => void actions.removeAbsence(a.id).catch(() => {})}
-                    className="text-tomato-ink text-sm font-medium"
+                    onClick={() => void remove(a.id)}
+                    disabled={removing === a.id}
+                    className="text-tomato-ink text-sm font-medium disabled:opacity-50"
                     aria-label={`Убрать отъезд: ${name}, с ${fmt(a.from)} по ${fmt(a.to)}`}
                   >
                     Убрать
@@ -262,12 +281,9 @@ export function Duties() {
   const zones: DutyZones = household.data?.duty_zones ?? {};
   const list = members.data ?? [];
 
-  const change = async (category: TaskCategory, zone: DutyZone | undefined) => {
-    const next = { ...zones };
-    if (zone) next[category] = zone;
-    else delete next[category];
+  const change = async (category: TaskCategory, fn: ZoneUpdate) => {
     try {
-      await actions.saveZones(next);
+      await actions.saveZone(category, fn);
     } catch (err) {
       toast.error(errorMessage(err));
     }
@@ -293,7 +309,7 @@ export function Duties() {
             category={c}
             zone={zones[c]}
             members={list}
-            onChange={(z) => void change(c, z)}
+            onChange={(fn) => void change(c, fn)}
           />
         ))}
       </ul>

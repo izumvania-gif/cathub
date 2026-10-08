@@ -20,6 +20,7 @@ import {
   type TaskCategory,
   type TimeOfDay,
 } from '@cathub/core';
+import { TZDate } from '@date-fns/tz';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Plus, X } from 'lucide-react';
 import { useState } from 'react';
@@ -28,6 +29,7 @@ import { Link, useLocation } from 'wouter';
 import { Button, Field, Input, Segmented, Toggle } from '../components/ui';
 import { useUser } from '../lib/auth';
 import { useTz } from '../lib/board';
+import { useEditForm } from '../lib/editForm';
 import { errorMessage, pb } from '../lib/pb';
 import { keys, useCat, useHousehold, useMembers, useTasks } from '../lib/queries';
 import { todayIso } from '../lib/templates';
@@ -43,8 +45,17 @@ const UNITS: Array<{ value: IntervalUnit; label: string }> = [
 ];
 const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
-const dateOnly = (iso: string) => (iso ? iso.slice(0, 10) : '');
 const pad = (n: number) => String(n).padStart(2, '0');
+/** "YYYY-MM-DD" of an instant in the household's time zone (start dates are its midnights). */
+function ymdIn(iso: string | number, tz: string) {
+  const d = new TZDate(typeof iso === 'number' ? iso : Date.parse(iso), tz);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+/** Midnight of a "YYYY-MM-DD" day in the household's time zone, as ISO (like todayIso). */
+function midnightIn(ymd: string, tz: string) {
+  const [y, m, d] = ymd.split('-').map(Number) as [number, number, number];
+  return new Date(new TZDate(y, m - 1, d, 0, 0, 0, tz).getTime()).toISOString();
+}
 function localDateTime(iso: string) {
   const d = iso ? new Date(iso) : new Date(Date.now() + 86_400_000);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -76,7 +87,7 @@ interface Draft {
   notify: NotifyLevel;
 }
 
-function draftFrom(task: Task | undefined): Draft {
+function draftFrom(task: Task | undefined, tz: string): Draft {
   const s = task?.schedule;
   return {
     title: task?.title ?? '',
@@ -88,8 +99,10 @@ function draftFrom(task: Task | undefined): Draft {
     every: s?.kind === 'interval' ? s.every : 1,
     unit: s?.kind === 'interval' ? s.unit : 'week',
     anchor: s?.kind === 'interval' ? s.anchor : 'completion',
+    // Read in the household's zone: slicing the UTC string showed the day before in Russia, and
+    // saving it back moved the start a day earlier every time.
     startDate:
-      s?.kind === 'interval' ? dateOnly(s.startDate) : new Date().toISOString().slice(0, 10),
+      s?.kind === 'interval' && s.startDate ? ymdIn(s.startDate, tz) : ymdIn(Date.now(), tz),
     graceDays: s?.kind === 'interval' ? (s.graceDays ?? 0) : 0,
     onceAt: localDateTime(s?.kind === 'once' ? s.at : ''),
     track: Boolean(task?.track_value),
@@ -121,7 +134,7 @@ function scheduleFrom(d: Draft, tz: string): Schedule | string {
     }
     case 'interval': {
       if (!(d.every >= 1)) return 'Интервал должен быть не меньше 1.';
-      const start = d.startDate ? new Date(`${d.startDate}T00:00:00`).toISOString() : todayIso(tz);
+      const start = d.startDate ? midnightIn(d.startDate, tz) : todayIso(tz);
       return {
         kind: 'interval',
         every: Math.round(d.every),
@@ -162,9 +175,14 @@ function Editor({ task }: { task?: Task }) {
   const household = useHousehold();
   const tz = useTz();
   const qc = useQueryClient();
-  const [d, setD] = useState<Draft>(() => draftFrom(task));
+  // Follows the newest server copy of the task (the list may come from the offline cache, the
+  // bot moves rotation turns, another member may edit it) and saves only what was changed here.
+  // The zone is part of the version: dates read in a default zone are re-read in the real one.
+  const form = useEditForm(draftFrom(task, tz), `${task?.updated ?? 'new'}|${tz}`);
+  const d = form.values;
   const [busy, setBusy] = useState(false);
-  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((p) => ({ ...p, [k]: v }));
+  const set = <K extends keyof Draft>(k: K, v: Draft[K]) =>
+    form.set({ [k]: v } as unknown as Partial<Draft>);
   const preview = scheduleFrom(d, tz);
 
   const fromTemplate = (key: string) => {
@@ -175,8 +193,8 @@ function Editor({ task }: { task?: Task }) {
       longHair: cat.data?.long_hair ?? false,
       clumpingLitter: true,
     });
-    setD({
-      ...draftFrom(undefined),
+    form.set({
+      ...draftFrom(undefined, tz),
       title: t.title,
       emoji: t.emoji,
       category: t.category,
@@ -195,44 +213,60 @@ function Editor({ task }: { task?: Task }) {
   };
 
   const zoneUser = household.data?.duty_zones?.[d.category]?.user ?? '';
-  const isMapKey = (k: string) => (d.who === 'weekday' ? /^[1-7]$/.test(k) : d.times.includes(k));
+  /** The record fields a draft stands for (a string when the draft isn't valid). */
+  const bodyFrom = (d: Draft) => {
+    const schedule = scheduleFrom(d, tz);
+    if (typeof schedule === 'string') return schedule;
+    const isMapKey = (k: string) => (d.who === 'weekday' ? /^[1-7]$/.test(k) : d.times.includes(k));
+    return {
+      title: d.title.trim(),
+      emoji: d.emoji.trim() || '🐾',
+      category: d.category,
+      schedule,
+      track_value: d.track
+        ? { label: d.trackLabel.trim() || 'Значение', unit: d.trackUnit.trim() }
+        : null,
+      medical: d.medical,
+      notes: d.notes.trim(),
+      // Rotation starts with its first person unless the current assignee is already in it.
+      assignee:
+        d.who === 'one'
+          ? d.assignee
+          : d.who === 'rotation' && d.rotation.length
+            ? d.rotation.includes(d.assignee)
+              ? d.assignee
+              : d.rotation[0]
+            : '',
+      rotation: d.who === 'rotation' ? d.rotation : [],
+      assign_mode: d.who,
+      duty_map:
+        d.who === 'weekday' || (d.who === 'slot' && d.kind === 'daily_slots')
+          ? Object.fromEntries(Object.entries(d.dutyMap).filter(([k, v]) => v && isMapKey(k)))
+          : null,
+      weight: d.weight,
+      notify: d.notify,
+    };
+  };
 
   const save = async () => {
-    const schedule = scheduleFrom(d, tz);
-    if (typeof schedule === 'string') return toast.error(schedule);
+    const body = bodyFrom(d);
+    if (typeof body === 'string') return toast.error(body);
     if (!d.title.trim()) return toast.error('Как называется дело?');
     setBusy(true);
     try {
-      const body = {
-        title: d.title.trim(),
-        emoji: d.emoji.trim() || '🐾',
-        category: d.category,
-        schedule,
-        track_value: d.track
-          ? { label: d.trackLabel.trim() || 'Значение', unit: d.trackUnit.trim() }
-          : null,
-        medical: d.medical,
-        notes: d.notes.trim(),
-        // Rotation starts with its first person unless the current assignee is already in it.
-        assignee:
-          d.who === 'one'
-            ? d.assignee
-            : d.who === 'rotation' && d.rotation.length
-              ? d.rotation.includes(d.assignee)
-                ? d.assignee
-                : d.rotation[0]
-              : '',
-        rotation: d.who === 'rotation' ? d.rotation : [],
-        assign_mode: d.who,
-        duty_map:
-          d.who === 'weekday' || (d.who === 'slot' && d.kind === 'daily_slots')
-            ? Object.fromEntries(Object.entries(d.dutyMap).filter(([k, v]) => v && isMapKey(k)))
-            : null,
-        weight: d.weight,
-        notify: d.notify,
-      };
-      if (task) await pb.collection('tasks').update(task.id, body);
-      else
+      if (task) {
+        // Only what changed: fields the form merely showed (maybe an old copy) stay as they are,
+        // including the rotation turn the server moves after each mark.
+        const before = bodyFrom(form.base);
+        const changed = Object.fromEntries(
+          Object.entries(body).filter(
+            ([k, v]) =>
+              typeof before === 'string' ||
+              JSON.stringify(v) !== JSON.stringify(before[k as keyof typeof before]),
+          ),
+        );
+        if (Object.keys(changed).length) await pb.collection('tasks').update(task.id, changed);
+      } else
         await pb.collection('tasks').create({
           ...body,
           household: user!.household,
@@ -251,9 +285,16 @@ function Editor({ task }: { task?: Task }) {
 
   const archive = async () => {
     if (!task || !confirm('Убрать дело? История отметок сохранится.')) return;
-    await pb.collection('tasks').update(task.id, { archived: true });
-    await qc.invalidateQueries({ queryKey: keys.tasks });
-    navigate('/tasks');
+    setBusy(true);
+    try {
+      await pb.collection('tasks').update(task.id, { archived: true });
+      await qc.invalidateQueries({ queryKey: keys.tasks });
+      navigate('/tasks');
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -664,7 +705,7 @@ function Editor({ task }: { task?: Task }) {
           {task ? 'Сохранить' : 'Добавить дело'}
         </Button>
         {task ? (
-          <Button variant="danger" onClick={archive}>
+          <Button variant="danger" disabled={busy} onClick={archive}>
             Убрать дело
           </Button>
         ) : null}

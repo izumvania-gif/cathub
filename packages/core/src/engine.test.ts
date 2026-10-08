@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluate, occurrences, type CompletionLike } from './engine';
+import { evaluate, nowAfterMarks, occurrences, type CompletionLike } from './engine';
 import type { Schedule } from './schedule';
 
 const TZ = 'Europe/Moscow'; // UTC+3, no DST
@@ -262,5 +262,34 @@ describe('occurrences for floating schedules', () => {
       msk('2026-10-11T00:00:00'),
       msk('2026-10-18T00:00:00'),
     ]);
+  });
+});
+
+describe('nowAfterMarks', () => {
+  const now = new Date('2026-10-08T10:00:00Z');
+  it('keeps now when every mark is in the past', () => {
+    expect(nowAfterMarks(now, ['2026-10-08T09:59:00Z'])).toBe(now);
+  });
+  it('moves up to a mark from a clock slightly ahead', () => {
+    expect(nowAfterMarks(now, ['2026-10-08T10:00:02Z']).toISOString()).toBe(
+      '2026-10-08T10:00:02.000Z',
+    );
+  });
+  it('does not follow a clock that is far off', () => {
+    expect(nowAfterMarks(now, ['2026-10-09T10:00:00Z', '2026-10-08T10:00:05Z']).toISOString()).toBe(
+      '2026-10-08T10:00:05.000Z',
+    );
+    expect(nowAfterMarks(now, ['2026-10-09T10:00:00Z'])).toBe(now);
+  });
+  it('makes a fresh mark from a clock ahead count', () => {
+    const marks = [{ doneAt: '2026-10-08T10:00:03Z', kind: 'done' as const }];
+    expect(evaluate(feeding, marks, { now, tz: TZ }).lastCompletion).toBeNull();
+    const later = nowAfterMarks(
+      now,
+      marks.map((m) => m.doneAt),
+    );
+    expect(evaluate(feeding, marks, { now: later, tz: TZ }).lastCompletion?.doneAt).toBe(
+      marks[0]!.doneAt,
+    );
   });
 });

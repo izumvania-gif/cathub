@@ -5,13 +5,17 @@ import { Sheet } from '../components/Sheet';
 import { StatsCard } from '../components/StatsCard';
 import { Avatar, Button, Empty, ListSkeleton, PageHeader } from '../components/ui';
 import { useTaskActions } from '../lib/actions';
+import { useUser } from '../lib/auth';
 import { useNow, useTz } from '../lib/board';
+import { asCompletion, useOutbox } from '../lib/outbox';
 import { errorMessage } from '../lib/pb';
 import { useCompletions, useMembers, useTasks } from '../lib/queries';
 import type { Completion } from '../lib/types';
 
 export function Journal() {
   const completions = useCompletions();
+  const queued = useOutbox();
+  const me = useUser();
   const tasks = useTasks();
   const members = useMembers();
   const tz = useTz();
@@ -20,6 +24,12 @@ export function Journal() {
   const [who, setWho] = useState<string>('all');
   const [selected, setSelected] = useState<Completion | null>(null);
 
+  // Marks saved without network are listed too, until they're sent.
+  const all = useMemo(
+    () => [...queued.map((q) => asCompletion(q, me)), ...(completions.data ?? [])],
+    [queued, me, completions.data],
+  );
+  const isQueued = (c: Completion) => c.id.startsWith('local-');
   const taskById = useMemo(() => new Map((tasks.data ?? []).map((t) => [t.id, t])), [tasks.data]);
   const groups = useMemo(() => {
     const dayFmt = new Intl.DateTimeFormat('ru-RU', {
@@ -31,7 +41,7 @@ export function Journal() {
     const keyFmt = new Intl.DateTimeFormat('en-CA', { timeZone: tz });
     const today = keyFmt.format(now);
     const yesterday = keyFmt.format(new Date(now.getTime() - 86_400_000));
-    const list = (completions.data ?? [])
+    const list = all
       .filter((c) => who === 'all' || c.user === who)
       .sort((a, b) => b.done_at.localeCompare(a.done_at));
     const out: Array<{ key: string; label: string; items: Completion[] }> = [];
@@ -48,7 +58,7 @@ export function Journal() {
       else out.push({ key, label, items: [c] });
     }
     return out;
-  }, [completions.data, who, tz, now]);
+  }, [all, who, tz, now]);
 
   const time = (iso: string) =>
     new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: tz }).format(
@@ -72,7 +82,7 @@ export function Journal() {
   return (
     <main className="mx-auto max-w-lg px-4 pb-28">
       <PageHeader title="Журнал" />
-      <StatsCard completions={completions.data ?? []} members={members.data ?? []} now={now} />
+      <StatsCard completions={all} members={members.data ?? []} now={now} />
       <div className="-mx-4 mb-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {chip('all', 'Все')}
         {(members.data ?? []).map((m) => chip(m.id, m.name || m.email))}
@@ -117,7 +127,11 @@ export function Journal() {
                         ) : null}
                       </span>
                       <span className="text-ink-soft flex items-center gap-2 text-sm tabular-nums">
-                        {c.fish > 0 ? <span className="text-xs">+{c.fish} 🐟</span> : null}
+                        {isQueued(c) ? (
+                          <span className="text-xs">не отправлено</span>
+                        ) : c.fish > 0 ? (
+                          <span className="text-xs">+{c.fish} 🐟</span>
+                        ) : null}
                         <Avatar name={c.expand?.user?.name} />
                         {time(c.done_at)}
                       </span>

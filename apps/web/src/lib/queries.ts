@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { pb, toIso } from './pb';
 import type {
@@ -16,7 +16,8 @@ import type {
   FishBalance,
   RoomItem,
 } from './types';
-import { useUser } from './auth';
+import { refreshAuth, useUser } from './auth';
+import { withPendingZones } from './zones';
 
 export const keys = {
   household: ['household'] as const,
@@ -44,7 +45,8 @@ export function useHousehold() {
   return useQuery({
     queryKey: [...keys.household, user?.household],
     enabled: Boolean(user?.household),
-    queryFn: () => pb.collection('households').getOne<Household>(user!.household),
+    queryFn: async () =>
+      withPendingZones(await pb.collection('households').getOne<Household>(user!.household)),
   });
 }
 
@@ -91,6 +93,8 @@ export function useCompletions() {
   return useQuery({
     queryKey: [...keys.completions, user?.household, tasks.data?.map((t) => t.id).join(',')],
     enabled: Boolean(user?.household) && tasks.isSuccess,
+    // A new task changes the key; keep showing the marks we have until the new list arrives.
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const since = new Date(Date.now() - RECENT_DAYS * 86_400_000).toISOString().replace('T', ' ');
       const recent = await pb.collection('completions').getFullList<Completion>({
@@ -257,6 +261,7 @@ export function useAbsences() {
 export function useRealtimeSync() {
   const qc = useQueryClient();
   const user = useUser();
+  const me = user?.id;
   useEffect(() => {
     if (!user?.household) return;
     const subs: Array<[string, readonly unknown[]]> = [
@@ -279,17 +284,72 @@ export function useRealtimeSync() {
       ['snoozes', keys.snoozes],
       ['cats', keys.cat],
       ['households', keys.household],
+      ['users', keys.members],
     ];
-    const unsubs = subs.map(([collection, key]) =>
-      pb.collection(collection).subscribe('*', () => qc.invalidateQueries({ queryKey: key })),
-    );
-    // After a reconnect (phone woke up, network changed) events may have been missed.
-    const onConnect = pb.realtime.subscribe('PB_CONNECT', () => qc.invalidateQueries());
-    const onVisible = () => document.visibilityState === 'visible' && qc.invalidateQueries();
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      for (const u of [...unsubs, onConnect]) void u.then((fn) => fn()).catch(() => {});
-      document.removeEventListener('visibilitychange', onVisible);
+    const collections = [...new Set(subs.map(([c]) => c))];
+    // Everything that may have changed while we weren't listening: data and our own profile
+    // (notification settings and the Telegram link live on the auth record).
+    const resync = () => {
+      void qc.invalidateQueries();
+      refreshAuth().catch(() => {});
     };
-  }, [qc, user?.household]);
+    let stopped = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+    let unsubs: Array<Promise<() => Promise<void>>> = [];
+
+    const connect = () => {
+      unsubs = [
+        ...subs.map(([collection, key]) =>
+          pb.collection(collection).subscribe('*', (e) => {
+            void qc.invalidateQueries({ queryKey: key });
+            if (collection === 'users' && e.record.id === me) refreshAuth().catch(() => {});
+          }),
+        ),
+        pb.realtime.subscribe('PB_CONNECT', resync),
+      ];
+      Promise.all(unsubs).then(
+        () => (attempt = 0),
+        () => {
+          // The SDK gives up if the very first connect fails (offline start, flaky network):
+          // drop the half-made listeners and try again with a backoff.
+          if (stopped) return;
+          for (const c of collections)
+            void pb
+              .collection(c)
+              .unsubscribe()
+              .catch(() => {});
+          void pb.realtime.unsubscribe('PB_CONNECT').catch(() => {});
+          clearTimeout(retry);
+          // `retry` is set only while a retry waits (reconnectNow may then start it early).
+          retry = setTimeout(() => {
+            retry = undefined;
+            connect();
+          }, [2000, 5000, 10000, 30000][Math.min(attempt++, 3)]);
+        },
+      );
+    };
+    connect();
+
+    const reconnectNow = () => {
+      if (stopped || pb.realtime.isConnected || !retry) return;
+      clearTimeout(retry);
+      retry = undefined;
+      connect();
+    };
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      resync();
+      reconnectNow();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', reconnectNow);
+    return () => {
+      stopped = true;
+      clearTimeout(retry);
+      for (const u of unsubs) void u.then((fn) => fn()).catch(() => {});
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', reconnectNow);
+    };
+  }, [qc, user?.household, me]);
 }

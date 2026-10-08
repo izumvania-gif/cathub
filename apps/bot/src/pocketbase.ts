@@ -29,12 +29,9 @@ export const toIso = (d: string) => d.replace(' ', 'T');
 export const toPbDate = (d: Date) => d.toISOString().replace('T', ' ');
 
 const RECENT_DAYS = 60;
-const OLDER_CACHE_MS = 60 * 60 * 1000;
 
 export class PocketBaseClient {
   readonly pb = new PocketBase(config.pbUrl);
-  /** Latest completion of tasks with nothing in the recent window; only changes via new completions. */
-  private olderCache = new Map<string, { at: number; rec: CompletionRec | null }>();
 
   constructor() {
     this.pb.autoCancellation(false);
@@ -93,6 +90,7 @@ export class PocketBaseClient {
       absences,
       health,
       tips,
+      latest,
     ] = await Promise.all([
       this.pb.collection('households').getFullList<HouseholdRec>(),
       this.pb.collection('users').getFullList<UserRec>({ filter: 'household != ""' }),
@@ -100,7 +98,13 @@ export class PocketBaseClient {
       this.pb.collection('tasks').getFullList<TaskRec>({ filter: 'archived = false' }),
       this.pb
         .collection('completions')
-        .getFullList<CompletionRec>({ filter: this.pb.filter('done_at >= {:since}', { since }) }),
+        // Also older marks not priced yet (one moved back in time is priced again).
+        .getFullList<CompletionRec>({
+          filter: this.pb.filter(
+            'done_at >= {:since} || (rewarded = false && task.archived = false)',
+            { since },
+          ),
+        }),
       this.pb.collection('snoozes').getFullList<SnoozeRec>(),
       this.pb.collection('supplies').getFullList<SupplyRec>(),
       this.pb.collection('fish_balance').getFullList<{
@@ -123,14 +127,12 @@ export class PocketBaseClient {
       this.pb
         .collection('health_tips')
         .getFullList<{ household: string; tip: string }>({ fields: 'household,tip' }),
+      this.pb.collection('latest_completions').getFullList<CompletionRec>(),
     ]);
+    // Tasks with nothing recent (a yearly vaccine) count from their newest completion.
     const withRecent = new Set(recent.map((c) => c.task));
-    const older = await Promise.all(
-      tasks.filter((t) => !withRecent.has(t.id)).map((t) => this.latestOlder(t.id)),
-    );
-    const completions = [...recent, ...older.filter((c): c is CompletionRec => c !== null)].map(
-      (c) => ({ ...c, done_at: toIso(c.done_at) }),
-    );
+    const older = latest.filter((c) => !withRecent.has(c.task));
+    const completions = [...recent, ...older].map((c) => ({ ...c, done_at: toIso(c.done_at) }));
     return households.map((household) => ({
       household,
       cat: cats.find((c) => c.household === household.id) ?? null,
@@ -162,18 +164,6 @@ export class PocketBaseClient {
           : undefined;
       })(),
     }));
-  }
-
-  private async latestOlder(taskId: string): Promise<CompletionRec | null> {
-    const cached = this.olderCache.get(taskId);
-    if (cached && Date.now() - cached.at < OLDER_CACHE_MS) return cached.rec;
-    const res = await this.pb.collection('completions').getList<CompletionRec>(1, 1, {
-      filter: this.pb.filter('task = {:task}', { task: taskId }),
-      sort: '-done_at',
-    });
-    const rec = res.items[0] ?? null;
-    this.olderCache.set(taskId, { at: Date.now(), rec });
-    return rec;
   }
 
   // ── users & linking ─────────────────────────────────────────────────────
@@ -264,7 +254,6 @@ export class PocketBaseClient {
       done_at: toPbDate(new Date()),
       kind,
     });
-    this.olderCache.delete(task.id);
     await this.clearSnoozes(task.id);
     return { ...rec, done_at: toIso(rec.done_at) };
   }

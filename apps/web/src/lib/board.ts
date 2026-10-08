@@ -1,13 +1,14 @@
 import {
   assigneeFor,
   evaluate,
+  nowAfterMarks,
   urgencyCompare,
   type Assignment,
   type DutyContext,
   type Evaluation,
 } from '@cathub/core';
 import { useEffect, useMemo, useState } from 'react';
-import { useOutbox } from './outbox';
+import { asCompletion, useOutbox } from './outbox';
 import { toIso } from './pb';
 import {
   useAbsences,
@@ -77,10 +78,14 @@ export function useBoard() {
   const queued = useOutbox();
   const duty = useDutyContext();
 
-  // "Now" is never earlier than the last data load: a completion made a second ago must not
-  // look like it's in the future (the engine ignores those) until the next tick.
+  // "Now" is never earlier than the newest data: a completion made a second ago must not look
+  // like it's in the future (the engine ignores those) until the next tick. That includes marks
+  // stamped by a clock a little ahead of this phone's (another phone, the bot's server).
   const nowMs = Math.max(
-    tick.getTime(),
+    nowAfterMarks(
+      tick,
+      (completions.data ?? []).map((c) => c.done_at),
+    ).getTime(),
     completions.dataUpdatedAt,
     snoozes.dataUpdatedAt,
     ...queued.map((q) => Date.parse(toIso(q.done_at))),
@@ -91,16 +96,7 @@ export function useBoard() {
     const now = new Date(nowMs);
     const byTask = new Map<string, Completion[]>();
     // Offline marks count right away (they look like regular completions without `expand`).
-    const pending = queued.map(
-      (q) =>
-        ({
-          ...q,
-          id: q.localId,
-          done_at: toIso(q.done_at),
-          value: q.value ?? 0,
-          note: q.note ?? '',
-        }) as unknown as Completion,
-    );
+    const pending = queued.map((q) => asCompletion(q));
     for (const c of [...completions.data, ...pending]) {
       const list = byTask.get(c.task) ?? [];
       list.push(c);

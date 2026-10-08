@@ -1,7 +1,15 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { pb, toPbDate } from './pb';
-import { isNetworkError, outbox } from './outbox';
+import { ClientResponseError } from 'pocketbase';
+import {
+  clearSnoozes,
+  isNetworkError,
+  newRecordId,
+  outbox,
+  restoreSnoozes,
+  serverIdOf,
+} from './outbox';
 import { keys } from './queries';
 import type { Completion, Task } from './types';
 
@@ -28,6 +36,8 @@ export function useTaskActions() {
     opts: { at?: Date; kind?: 'done' | 'skipped'; value?: number | null; note?: string } = {},
   ): Promise<{ id: string; queued: boolean }> => {
     const body = {
+      // Made here, so a retry of a save whose answer got lost isn't saved twice (lib/outbox.ts).
+      id: newRecordId(),
       household: task.household,
       task: task.id,
       user: pb.authStore.record!.id,
@@ -38,7 +48,7 @@ export function useTaskActions() {
     };
     try {
       const record = await pb.collection('completions').create<Completion>(body);
-      await clearSnooze(task).catch(() => {});
+      await clearSnoozes(record.id, task.id, opts.at ?? null).catch(() => {});
       await refresh();
       return { id: record.id, queued: false };
     } catch (err) {
@@ -48,11 +58,18 @@ export function useTaskActions() {
   };
 
   const undo = async (completionId: string) => {
-    if (completionId.startsWith('local-')) {
-      outbox.remove(completionId);
-      return;
+    // Not sent yet: just drop it (a send in progress deletes it once it lands).
+    if (outbox.has(completionId)) return outbox.remove(completionId);
+    const id = serverIdOf(completionId);
+    if (!id) return;
+    try {
+      await pb.collection('completions').delete(id);
+    } catch (err) {
+      // Already gone (deleted elsewhere, or the server refused the queued mark).
+      if (!(err instanceof ClientResponseError && err.status === 404)) throw err;
     }
-    await pb.collection('completions').delete(completionId);
+    // The mark had cleared a snooze: put it back.
+    await restoreSnoozes(id);
     await refresh();
   };
 

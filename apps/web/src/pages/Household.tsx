@@ -1,4 +1,6 @@
+import { isTimeOfDay } from '@cathub/core';
 import { useQueryClient } from '@tanstack/react-query';
+import clsx from 'clsx';
 import { Copy, RefreshCw, Share2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -30,6 +32,18 @@ const TIMEZONES = [
   ['Asia/Magadan', 'Магадан (UTC+11)'],
   ['Asia/Kamchatka', 'Камчатка (UTC+12)'],
 ] as const;
+
+/** A zone that isn't in the list (onboarding stores the device's zone as is), with its offset. */
+function zoneLabel(tz: string) {
+  try {
+    const off = new Intl.DateTimeFormat('ru-RU', { timeZone: tz, timeZoneName: 'shortOffset' })
+      .formatToParts(new Date())
+      .find((p) => p.type === 'timeZoneName')?.value;
+    return `${tz.split('/').pop()!.replace(/_/g, ' ')} (${off?.replace('GMT', 'UTC') ?? tz})`;
+  } catch {
+    return tz;
+  }
+}
 
 export function InviteCard({ code, onRotate }: { code: string; onRotate?: () => void }) {
   const link = inviteLink(code);
@@ -185,9 +199,22 @@ function CatForm({ cat }: { cat: Cat }) {
           placeholder="Название, телефон"
         />
       </Field>
-      <Button variant="secondary" busy={busy} onClick={save}>
-        Сохранить
-      </Button>
+      {/* With unsaved changes the button sticks above the tab bar: the date field is a screen
+          away from it on a phone. */}
+      <div
+        className={clsx(
+          form.dirty && 'sticky bottom-[calc(env(safe-area-inset-bottom)+5rem)] z-10',
+        )}
+      >
+        <Button
+          variant={form.dirty ? 'primary' : 'secondary'}
+          className="w-full"
+          busy={busy}
+          onClick={save}
+        >
+          {form.dirty ? 'Сохранить изменения' : 'Сохранить'}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -224,8 +251,9 @@ function TelegramCard() {
     setBusy(true);
     try {
       await pb.send('/api/cathub/telegram/unlink', { method: 'POST' });
-      await refreshAuth();
       toast('Напоминания в Telegram отключены');
+      // A failed refresh must not turn the successful unlink into an error.
+      await refreshAuth().catch(() => {});
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -265,20 +293,36 @@ function TelegramCard() {
 /** Personal notification settings: morning digest and quiet hours (docs/PLAN.md §9). */
 function NotifySettings() {
   const user = useUser()!;
-  const [digestOn, setDigestOn] = useState(Boolean(user.digest_time));
-  const [digestTime, setDigestTime] = useState(user.digest_time || '09:00');
-  const [quietFrom, setQuietFrom] = useState(user.quiet_hours?.from ?? '23:00');
-  const [quietTo, setQuietTo] = useState(user.quiet_hours?.to ?? '08:00');
+  // Follows the newest copy of the profile (another device or the Mini App may change it) and
+  // saves only what was changed here.
+  const form = useEditForm(
+    {
+      digestOn: Boolean(user.digest_time),
+      digestTime: user.digest_time || '09:00',
+      quietFrom: user.quiet_hours?.from ?? '23:00',
+      quietTo: user.quiet_hours?.to ?? '08:00',
+    },
+    user.updated,
+  );
+  const { digestOn, digestTime, quietFrom, quietTo } = form.values;
   const [busy, setBusy] = useState(false);
 
   const save = async () => {
+    const ch = form.changes();
+    if (digestOn && !isTimeOfDay(digestTime)) return void toast.error('Укажите время сводки');
+    if (!isTimeOfDay(quietFrom) || !isTimeOfDay(quietTo))
+      return void toast.error('Укажите тихие часы: с какого и до какого времени');
+    const body: Record<string, unknown> = {};
+    if (ch.digestOn !== undefined || ch.digestTime !== undefined)
+      body.digest_time = digestOn ? digestTime : '';
+    if (ch.quietFrom !== undefined || ch.quietTo !== undefined)
+      body.quiet_hours = { from: quietFrom, to: quietTo };
+    if (!Object.keys(body).length) return void toast.success('Сохранено');
     setBusy(true);
     try {
-      await pb.collection('users').update(user.id, {
-        digest_time: digestOn ? digestTime : '',
-        quiet_hours: { from: quietFrom, to: quietTo },
-      });
-      await refreshAuth();
+      // The SDK puts the returned record into the auth store (it's our own user).
+      await pb.collection('users').update(user.id, body);
+      form.saved(ch);
       toast.success('Сохранено');
     } catch (err) {
       toast.error(errorMessage(err));
@@ -294,12 +338,16 @@ function NotifySettings() {
           label="Утренняя сводка"
           hint="Что сегодня и что просрочено. Не приходит, если делать нечего."
           checked={digestOn}
-          onChange={setDigestOn}
+          onChange={(on) => form.set({ digestOn: on })}
         />
       </div>
       {digestOn ? (
         <Field label="Время сводки">
-          <Input type="time" value={digestTime} onChange={(e) => setDigestTime(e.target.value)} />
+          <Input
+            type="time"
+            value={digestTime}
+            onChange={(e) => form.set({ digestTime: e.target.value })}
+          />
         </Field>
       ) : null}
       <div>
@@ -309,14 +357,14 @@ function NotifySettings() {
             type="time"
             aria-label="Тихие часы с"
             value={quietFrom}
-            onChange={(e) => setQuietFrom(e.target.value)}
+            onChange={(e) => form.set({ quietFrom: e.target.value })}
           />
           <span className="text-ink-soft">—</span>
           <Input
             type="time"
             aria-label="Тихие часы до"
             value={quietTo}
-            onChange={(e) => setQuietTo(e.target.value)}
+            onChange={(e) => form.set({ quietTo: e.target.value })}
           />
         </div>
         <span className="text-ink-soft mt-1.5 block text-xs">
@@ -556,6 +604,10 @@ export function Household() {
             disabled={!isOwner}
             onChange={(e) => void setTz(e.target.value)}
           >
+            {household.data?.timezone &&
+            !TIMEZONES.some(([v]) => v === household.data!.timezone) ? (
+              <option value={household.data.timezone}>{zoneLabel(household.data.timezone)}</option>
+            ) : null}
             {TIMEZONES.map(([v, l]) => (
               <option key={v} value={v}>
                 {l}

@@ -26,11 +26,19 @@ export function useCompleteFlow() {
           : 'Отмечено';
       const reward = fish > 0 && opts?.kind !== 'skipped' ? ` · +${fish} 🐟` : '';
       toast.success(`${label}: ${task.title}${reward}`, {
-        action: { label: 'Отменить', onClick: () => void actions.undo(rec.id).catch(() => {}) },
+        action: {
+          label: 'Отменить',
+          onClick: () =>
+            void actions
+              .undo(rec.id)
+              .catch((err) => toast.error(`Не получилось отменить: ${errorMessage(err)}`)),
+        },
       });
       navigator.vibrate?.(12);
+      return true;
     } catch (err) {
       toast.error(errorMessage(err));
+      return false;
     }
   };
 

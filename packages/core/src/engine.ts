@@ -388,6 +388,29 @@ function evaluateOnce(
 
 // ─── public API ─────────────────────────────────────────────────────────────
 
+/** How far ahead of this clock another one may be trusted; a bigger gap is a wrong clock. */
+export const MAX_CLOCK_SKEW_MS = 10 * 60_000;
+
+/**
+ * "Now" for evaluating marks stamped by other clocks (another phone, the bot's server):
+ * never earlier than the newest mark, so a mark made a second ago by a clock slightly ahead
+ * isn't ignored as "in the future". A mark more than `maxSkewMs` ahead comes from a wrong
+ * clock and moves nothing (it counts once real time reaches it).
+ */
+export function nowAfterMarks(
+  now: Date,
+  doneAts: Iterable<string>,
+  maxSkewMs = MAX_CLOCK_SKEW_MS,
+): Date {
+  let newest = now.getTime();
+  const limit = newest + maxSkewMs;
+  for (const d of doneAts) {
+    const t = Date.parse(d);
+    if (t > newest && t <= limit) newest = t;
+  }
+  return newest === now.getTime() ? now : new Date(newest);
+}
+
 /**
  * Computes the status of a task from its schedule, completions and the current time.
  * This is the single source of truth for due dates (CLAUDE.md): nothing is stored.

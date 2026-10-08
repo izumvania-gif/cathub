@@ -143,6 +143,9 @@ export function App() {
     <PersistQueryClientProvider
       client={queryClient}
       persistOptions={{ persister, maxAge: WEEK, buster: 'v1' }}
+      // The restored copy keeps its old timestamps (and can be up to 2 s behind), so it would
+      // count as fresh: refetch in the background, still showing it meanwhile and offline.
+      onSuccess={() => void queryClient.invalidateQueries()}
     >
       <MotionConfig reducedMotion="user">
         <ErrorBoundary>

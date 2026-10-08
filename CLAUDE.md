@@ -69,7 +69,8 @@ pnpm-workspaces monorepo:
 - `apps/web`: React + Vite + TypeScript PWA (Tailwind v4, shadcn/ui, Motion, TanStack Query,
   vite-plugin-pwa, date-fns with `ru` locale).
 - `apps/bot`: Node + TypeScript + grammY. `ReminderService.tick()` (every 30 s) loads all
-  households as superuser, asks core's `reminderPlan` which reminder is due, and sends each
+  households as superuser (completions of the last 60 days, plus the `latest_completions` view for
+  rare chores with nothing recent), asks core's `reminderPlan` which reminder is due, and sends each
   (task, occurrence, stage, chat) once. Reminders are deliberately few: only chores whose
   `notifyLevel` is `push` (`tasks.notify`; small daily chores like water default to `digest`), one
   message at the due time, nothing for a late daily slot, and for overdue rare chores a nudge at
@@ -106,7 +107,8 @@ pnpm-workspaces monorepo:
   teeth, sterilization, adult food, bloodwork after 7, check-ups every 6 months after 10). Every
   tip says «уточните у ветеринара». `health_tips` stores what the family did with a tip (hid,
   added to chores, done); the Health page shows «Сейчас по возрасту», the bot's digest one fresh
-  tip (`freshHealthTip`).
+  tip (`freshHealthTip`). A health record stores the chore mark it made
+  (`health_records.completion`): editing its date moves that mark, deleting the record deletes it.
 - Fish 🐟 (docs/PLAN.md §6.7): core's `rewardFor` prices a completion from the task's status at
   that moment (weight × 5, ×1.5 on time, 0 for a repeat or a skip). The bot's tick
   (`ReminderService.rewardPending`) stores it in `completions.fish` + `rewarded`; clients can't set
@@ -123,7 +125,8 @@ pnpm-workspaces monorepo:
   accessory: crown, propeller cap, medal, fisher hat). Games never change the cat's mood.
   Sounds are WebAudio (`games/sound.ts`), off by default.
 - Other hooks: `rotation.pb.js` (after a completion the assignee moves to the next person in
-  `tasks.rotation`; undone on delete), `backups.pb.js` (backup cron/S3 from `BACKUP_*` env on start),
+  `tasks.rotation`; undone on delete), `rewards.pb.js` (a completion whose `done_at` changes is
+  unpriced, so the bot prices it again), `backups.pb.js` (backup cron/S3 from `BACKUP_*` env on start),
   `users.pb.js` (default digest time).
 - `pocketbase/`: PocketBase backend (auth, SQLite, realtime, files). Schema lives in
   `pb_migrations` and access control in API rules. Every record is scoped to the user's `household`.
@@ -152,7 +155,17 @@ needs `refreshAuth()` to update its own view of the user. Offline: the query cac
 localStorage (`cathub.cache`) and completions made without network go to `lib/outbox.ts`
 (`cathub.outbox`), are merged into `useBoard` immediately, and flushed by `OfflineBanner`. When
 computing "now" for the engine, never use a value older than the newest data (fetched or queued):
-the engine ignores completions in the future, which makes fresh marks invisible.
+the engine ignores completions in the future, which makes fresh marks invisible. Marks stamped by
+a clock slightly ahead (another phone, the bot's server) go through core's `nowAfterMarks` (the web
+board, the bot's tick and its ✅ button all use it).
+
+Edit forms (cat profile, notifications, task editor, health records, supplies) use
+`lib/editForm.ts`: `useEditForm(serverValues, record.updated)` keeps fields the user hasn't touched
+in step with newer server data and `changes()` returns only what was edited. Save only those
+fields, never a whole form built from what the screen happened to show: the persisted cache is
+restored on reload before the server answers, and another member may have edited the record.
+Read-modify-write on shared JSON (`households.duty_zones`) applies a delta to a fresh read, one
+save at a time (`lib/duties.ts`, `lib/zones.ts`).
 
 Deployment (docs/DEPLOY_AMVERA.md): **one Amvera project, one container.** The root `Dockerfile`
 builds web + bot, and `deploy/entrypoint.sh` runs `pocketbase serve --http=0.0.0.0:8090

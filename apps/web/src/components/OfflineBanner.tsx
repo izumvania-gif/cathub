@@ -3,6 +3,9 @@ import { CloudOff } from 'lucide-react';
 import { useEffect, useSyncExternalStore } from 'react';
 import { toast } from 'sonner';
 import { flushOutbox, useOutbox } from '../lib/outbox';
+import { errorMessage, toIso } from '../lib/pb';
+import { keys } from '../lib/queries';
+import type { Completion, Task } from '../lib/types';
 import { plural } from '@cathub/core';
 
 function subscribeOnline(cb: () => void) {
@@ -22,7 +25,29 @@ export function OfflineBanner() {
 
   useEffect(() => {
     const flush = async () => {
-      const sent = await flushOutbox();
+      const sent = await flushOutbox({
+        // Into the cache before it leaves the queue, so the mark never blinks off the board
+        // (a fetch already on its way may predate it: cancel it, the final refresh redoes it).
+        sent: async (record) => {
+          const rec = { ...record, done_at: toIso(record.done_at) };
+          const add = (list: Completion[] | undefined) =>
+            list && !list.some((c) => c.id === rec.id) ? [...list, rec] : list;
+          await qc.cancelQueries({ queryKey: keys.completions });
+          qc.setQueriesData<Completion[]>({ queryKey: keys.completions }, add);
+          if (rec.kind === 'done' && rec.value > 0) {
+            const key = [...keys.measurements, rec.task];
+            await qc.cancelQueries({ queryKey: key });
+            qc.setQueriesData<Completion[]>({ queryKey: key }, add);
+          }
+        },
+        dropped: (q, err) => {
+          const title = qc
+            .getQueriesData<Task[]>({ queryKey: keys.tasks })
+            .flatMap(([, d]) => d ?? [])
+            .find((t) => t.id === q.task)?.title;
+          toast.error(`Отметка${title ? ` «${title}»` : ''} не сохранилась: ${errorMessage(err)}`);
+        },
+      });
       if (sent) {
         await qc.invalidateQueries();
         toast.success(`Отправлено отметок: ${sent}`);

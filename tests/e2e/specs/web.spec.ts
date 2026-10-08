@@ -32,6 +32,21 @@ async function onboard(page: Page) {
   return code;
 }
 
+/** GET a collection as the signed-in user, from the page (the app's own session). */
+function listInDb<T>(page: Page, collection: string, filter = '') {
+  return page.evaluate(
+    async ([collection, filter]) => {
+      const a = JSON.parse(localStorage.getItem('pocketbase_auth')!);
+      const q = filter ? `?filter=${encodeURIComponent(filter)}` : '';
+      const r = await fetch(`/api/collections/${collection}/records${q}`, {
+        headers: { Authorization: a.token },
+      });
+      return (await r.json()).items as T[];
+    },
+    [collection, filter] as const,
+  );
+}
+
 test('onboarding creates a household with template tasks', async ({ page }) => {
   await onboard(page);
   await expect(page.getByRole('button', { name: /^Барсик: .*Погладить$/ })).toBeVisible();
@@ -103,6 +118,46 @@ test('create a custom task in the editor', async ({ page }) => {
   await expect(page.getByRole('link', { name: /Дать витамины/ })).toBeVisible();
 });
 
+test('task editor: dates read back the same, a save keeps what others changed meanwhile', async ({
+  page,
+}) => {
+  await onboard(page);
+  await page.getByRole('link', { name: 'Дела' }).click();
+  await page.getByRole('link', { name: 'Новое' }).click();
+  await page.getByLabel('Название').fill('Капли от блох');
+  await page.getByRole('button', { name: 'По календарю' }).click();
+  await page.getByLabel('Первая дата').fill('2026-11-15');
+  await page.getByRole('button', { name: 'Добавить дело' }).click();
+
+  await page.getByRole('link', { name: /Капли от блох/ }).click();
+  await expect(page.getByLabel('Первая дата')).toHaveValue('2026-11-15');
+  // Someone else adds a note while this editor is open.
+  const [task] = await listInDb<{ id: string }>(page, 'tasks', 'title = "Капли от блох"');
+  await page.evaluate(async (id) => {
+    const a = JSON.parse(localStorage.getItem('pocketbase_auth')!);
+    await fetch(`/api/collections/tasks/records/${id}`, {
+      method: 'PATCH',
+      headers: { Authorization: a.token, 'content-type': 'application/json' },
+      body: JSON.stringify({ notes: 'Половина пипетки' }),
+    });
+  }, task!.id);
+  await expect(page.getByLabel('Заметка')).toHaveValue('Половина пипетки');
+  await page.getByLabel('Название').fill('Капли от блох и клещей');
+  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await expect(page.getByRole('link', { name: /Капли от блох и клещей/ })).toBeVisible();
+
+  const [saved] = await listInDb<{ notes: string; schedule: { startDate: string } }>(
+    page,
+    'tasks',
+    `id = "${task!.id}"`,
+  );
+  expect(saved!.notes).toBe('Половина пипетки');
+  // Midnight of 15 November in Moscow.
+  expect(saved!.schedule.startDate).toBe('2026-11-14T21:00:00.000Z');
+  await page.getByRole('link', { name: /Капли от блох и клещей/ }).click();
+  await expect(page.getByLabel('Первая дата')).toHaveValue('2026-11-15');
+});
+
 test('household page: invite code and Telegram settings', async ({ page }) => {
   const code = await onboard(page);
   await page.getByRole('link', { name: 'Дом' }).click();
@@ -126,14 +181,14 @@ test('cat profile: a changed birth date survives a quick reload and the next sav
   await page.getByRole('link', { name: 'Дом' }).click();
   const birth = page.getByLabel('Дата рождения');
   await birth.fill('2026-05-01');
-  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await page.getByRole('button', { name: 'Сохранить изменения' }).click();
   await expect(page.getByText('Сохранено')).toBeVisible();
   await page.waitForTimeout(2500); // the offline cache has caught up
 
   // Change it, then reload at once: the offline cache still has the old date.
   await page.reload();
   await birth.fill('2026-07-20');
-  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await page.getByRole('button', { name: 'Сохранить изменения' }).click();
   await expect.poll(birthInDb).toBe('2026-07-20');
   await page.reload();
   // The form shows the new date once the server answers, not the cached one.
@@ -141,7 +196,7 @@ test('cat profile: a changed birth date survives a quick reload and the next sav
 
   // Saving another field must not bring the old date back.
   await page.getByLabel('Номер чипа').fill('643094100000001');
-  await page.getByRole('button', { name: 'Сохранить', exact: true }).click();
+  await page.getByRole('button', { name: 'Сохранить изменения' }).click();
   await expect(page.getByText('Сохранено').last()).toBeVisible();
   await page.waitForTimeout(500);
   expect(await birthInDb()).toBe('2026-07-20');
@@ -180,6 +235,49 @@ test('health: record weights, see the chart, add a vaccination that completes th
   // The vaccine task is done now and moves out of "Сейчас".
   await page.getByRole('link', { name: 'Дела' }).click();
   await expect(page.getByRole('link', { name: /Прививка от бешенства.*сделано/ })).toBeVisible();
+});
+
+test('health: editing a record moves its chore mark, deleting it removes the mark', async ({
+  page,
+}) => {
+  await onboard(page);
+  const marks = async () =>
+    (await listInDb<{ done_at: string }>(page, 'completions', 'note = "Нобивак Rabies"')).map((c) =>
+      c.done_at.slice(0, 10),
+    );
+  await page.getByRole('link', { name: 'Здоровье' }).click();
+  await page.getByRole('button', { name: 'Запись', exact: true }).click();
+  await page
+    .getByRole('button', { name: /Прививка/ })
+    .first()
+    .click();
+  await page.getByLabel('Название').fill('Нобивак Rabies');
+  const rabies = await page
+    .locator('option', { hasText: 'Прививка от бешенства' })
+    .getAttribute('value');
+  await page.getByLabel('Отметить дело выполненным').selectOption(rabies!);
+  await page.getByRole('button', { name: 'Сохранить запись' }).click();
+  await expect(page.getByText(/«Прививка от бешенства» отмечено/)).toBeVisible();
+  await expect.poll(marks).toHaveLength(1);
+
+  // The vet passport says it was over a year ago: fix the date in the record.
+  const old = new Date(Date.now() - 400 * 86_400_000).toISOString().slice(0, 10);
+  await page.getByRole('button', { name: /Нобивак Rabies/ }).click();
+  await page.getByRole('button', { name: 'Изменить', exact: true }).click();
+  await page.getByLabel('Дата').fill(old);
+  await page.getByRole('button', { name: 'Сохранить изменения' }).click();
+  await expect.poll(marks).toEqual([old]);
+  await page.getByRole('link', { name: 'Дела' }).click();
+  await expect(page.getByRole('link', { name: /Прививка от бешенства/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Прививка от бешенства.*сделано/ })).toHaveCount(0);
+
+  // Deleting the record takes its mark with it.
+  await page.getByRole('link', { name: 'Здоровье' }).click();
+  await page.getByRole('button', { name: /Нобивак Rabies/ }).click();
+  page.once('dialog', (d) => void d.accept());
+  await page.getByRole('button', { name: 'Удалить', exact: true }).click();
+  await expect(page.getByRole('button', { name: /Нобивак Rabies/ })).toHaveCount(0);
+  await expect.poll(marks).toEqual([]);
 });
 
 test('household page offers the calendar subscription', async ({ page }) => {
@@ -231,13 +329,19 @@ test('offline: marks are queued, the app reopens without network, and they sync 
   await page.reload();
   await expect(page.getByRole('button', { name: /^Барсик: .*Погладить$/ })).toBeVisible();
   await expect(page.getByRole('status')).toContainText('1 отметка отправится');
+  // The journal lists it too, as not sent yet.
+  await page.getByRole('link', { name: 'Журнал' }).click();
+  await expect(
+    page.getByRole('button', { name: /Полностью сменить наполнитель.*не отправлено/ }),
+  ).toBeVisible();
 
   await context.setOffline(false);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect(page.getByText('Отправлено отметок: 1')).toBeVisible();
   await expect(page.getByRole('status')).toHaveCount(0);
   await page.getByRole('link', { name: 'Журнал' }).click();
-  await expect(page.getByRole('button', { name: /Полностью сменить наполнитель/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Полностью сменить наполнитель/ })).toHaveCount(1);
+  await expect(page.getByText('не отправлено')).toHaveCount(0);
 });
 
 test('Mini App: opening the app from Telegram signs in automatically', async ({
@@ -351,6 +455,40 @@ test('duties: a zone gives the litter to Петя, «Мои» hides it, «Воз
   await page.getByRole('button', { name: 'Мои', exact: true }).click();
   await expect(litter).toBeVisible();
   await expect(page.getByText('· ты').first()).toBeVisible();
+});
+
+test('duties: quick picks one after another are all saved', async ({ page }) => {
+  const code = await onboard(page);
+  const { api, createUser } = await import('../support/api');
+  const petya = await createUser('Петя');
+  await api('POST', '/api/cathub/join', { code }, petya.token);
+  await page.reload();
+  await page.getByRole('link', { name: 'Дом' }).click();
+  await page.getByRole('link', { name: /Обязанности/ }).click();
+
+  await page
+    .getByRole('listitem')
+    .filter({ has: page.getByLabel('Лоток: кто отвечает') })
+    .getByRole('button', { name: 'По дням недели по-разному' })
+    .click();
+  // No waiting between the picks: each one builds on the one before.
+  await page.getByLabel('Лоток, Пн').selectOption({ label: 'Петя' });
+  await page.getByLabel('Лоток, Вт').selectOption({ label: 'Маша' });
+  await page.getByLabel('Питание: кто отвечает').selectOption({ label: 'Петя' });
+  await expect(page.getByLabel('Лоток, Пн')).toHaveValue(petya.id);
+
+  const zones = async () =>
+    (await listInDb<{ duty_zones: Record<string, unknown> }>(page, 'households'))[0]!.duty_zones;
+  const me = await page.evaluate(
+    () => JSON.parse(localStorage.getItem('pocketbase_auth')!).record.id,
+  );
+  await expect.poll(zones).toEqual({
+    litter: { user: '', weekdays: { 1: petya.id, 2: me } },
+    feeding: { user: petya.id },
+  });
+  // The per-day picks show after a reload too.
+  await page.reload();
+  await expect(page.getByLabel('Лоток, Вт')).toHaveValue(me);
 });
 
 test('age tips: a kitten gets its vaccine course; add to chores, hide, record as done', async ({

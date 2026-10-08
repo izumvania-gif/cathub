@@ -1,10 +1,17 @@
-import { describeSupply, formatAmount, SUPPLY_TEMPLATES, type SupplyForecast } from '@cathub/core';
+import {
+  describeSupply,
+  formatAmount,
+  SUPPLY_TEMPLATES,
+  supplyForecast,
+  type SupplyForecast,
+} from '@cathub/core';
 import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useUser } from '../lib/auth';
-import { errorMessage, pb, toPbDate } from '../lib/pb';
+import { useTz } from '../lib/board';
+import { errorMessage, pb, toIso, toPbDate } from '../lib/pb';
 import { keys } from '../lib/queries';
 import type { Supply } from '../lib/types';
 import { Sheet } from './Sheet';
@@ -78,14 +85,41 @@ export function SupplySheet({
   const [amount, setAmount] = useState('');
   const [usage, setUsage] = useState('');
   const [lowDays, setLowDays] = useState('');
+  const tz = useTz();
   const close = () => {
     setMode('buy');
     setAmount('');
+    // Typed values belong to this supply only; the next one opens with empty fields.
+    setUsage('');
+    setLowDays('');
     onClose();
   };
-  const save = async (body: Record<string, unknown>, msg: string) => {
+  /** The amount left right now by the server's copy (the cached forecast may be out of date). */
+  const liveRemaining = async (id: string) => {
+    const fresh = await pb.collection('supplies').getOne<Supply>(id);
+    return supplyForecast(
+      {
+        stock: fresh.stock,
+        stockAt: toIso(fresh.stock_at),
+        dailyUsage: fresh.daily_usage,
+        lowDays: fresh.low_days,
+      },
+      new Date(),
+      tz,
+    ).remaining;
+  };
+  const save = async (
+    body: Record<string, unknown> | (() => Promise<Record<string, unknown> | null>),
+    msg: string,
+  ) => {
     try {
-      await pb.collection('supplies').update(supply!.id, body);
+      const data = typeof body === 'function' ? await body() : body;
+      if (!data) {
+        // Nothing changed: nothing to send.
+        toast.success(msg);
+        return close();
+      }
+      await pb.collection('supplies').update(supply!.id, data);
       await qc.invalidateQueries({ queryKey: keys.supplies });
       toast.success(msg);
       close();
@@ -141,7 +175,13 @@ export function SupplySheet({
           <Button
             disabled={!(a > 0)}
             onClick={() =>
-              save({ stock: f.remaining + a, stock_at: toPbDate(new Date()) }, 'Запас пополнен')
+              save(
+                async () => ({
+                  stock: (await liveRemaining(supply.id)) + a,
+                  stock_at: toPbDate(new Date()),
+                }),
+                'Запас пополнен',
+              )
             }
           >
             Добавить к остатку
@@ -187,16 +227,19 @@ export function SupplySheet({
           </Field>
           <Button
             onClick={() =>
-              save(
-                {
-                  // Re-anchor the stock so the new usage applies from now on.
-                  stock: f.remaining,
-                  stock_at: toPbDate(new Date()),
-                  ...(usage.trim() ? { daily_usage: num(usage) } : {}),
-                  ...(lowDays.trim() ? { low_days: Math.round(num(lowDays)) } : {}),
-                },
-                'Сохранено',
-              )
+              save(async () => {
+                const body: Record<string, unknown> = {};
+                const u = num(usage);
+                if (usage.trim() && u >= 0 && u !== supply.daily_usage) {
+                  // Re-anchor the stock (from the server's copy) so the new usage applies from now.
+                  body.stock = await liveRemaining(supply.id);
+                  body.stock_at = toPbDate(new Date());
+                  body.daily_usage = u;
+                }
+                const d = Math.round(num(lowDays));
+                if (lowDays.trim() && d >= 0 && d !== supply.low_days) body.low_days = d;
+                return Object.keys(body).length ? body : null;
+              }, 'Сохранено')
             }
           >
             Сохранить
@@ -205,9 +248,13 @@ export function SupplySheet({
             variant="danger"
             onClick={async () => {
               if (!confirm(`Больше не отслеживать «${supply.name}»?`)) return;
-              await pb.collection('supplies').delete(supply.id);
-              await qc.invalidateQueries({ queryKey: keys.supplies });
-              close();
+              try {
+                await pb.collection('supplies').delete(supply.id);
+                await qc.invalidateQueries({ queryKey: keys.supplies });
+                close();
+              } catch (err) {
+                toast.error(errorMessage(err));
+              }
             }}
           >
             Не отслеживать

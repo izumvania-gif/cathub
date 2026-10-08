@@ -17,6 +17,8 @@ const NEAR = BAND + 16;
  * tapping nonstop just burns the 45 seconds.
  */
 export const MISS_PENALTY = 2.5;
+/** "−2,5 с" (Russian decimal comma), for the pops. */
+const PENALTY_TEXT = `−${String(MISS_PENALTY).replace('.', ',')} с`;
 const MAX_MULT = 4;
 
 export type FishKind = 'fish' | 'gold' | 'ruff';
@@ -150,7 +152,7 @@ export function tap(s: State): TapResult {
     s.pops.push({
       x: W / 2,
       y: swimBottom(s.h),
-      text: near ? 'чуть-чуть, −1,5 с' : '−1,5 с',
+      text: near ? `чуть-чуть, ${PENALTY_TEXT}` : PENALTY_TEXT,
       t: 0,
     });
     return near ? 'near' : 'miss';
@@ -161,7 +163,7 @@ export function tap(s: State): TapResult {
     s.t += MISS_PENALTY;
     s.misses += 1;
     s.sulk = 0.5;
-    s.pops.push({ x: f.x, y: f.y, text: 'ай! −1,5 с', t: 0 });
+    s.pops.push({ x: f.x, y: f.y, text: `ай! ${PENALTY_TEXT}`, t: 0 });
     return 'ruff';
   }
   s.misses = 0;
